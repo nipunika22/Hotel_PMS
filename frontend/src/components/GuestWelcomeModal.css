@@ -1,0 +1,269 @@
+/* frontend/src/components/GuestWelcomeModal.css */
+/* ============================================================
+   Immersive Luxury Welcome Experience
+   Serendib Sanctuary Boutique Hospitality Aesthetic
+   ============================================================ */
+
+.guest-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: guestWelcomeFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes guestWelcomeFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.guest-welcome-card {
+  position: relative;
+  background: linear-gradient(160deg, rgba(22, 46, 36, 0.96) 0%, rgba(13, 30, 23, 0.98) 100%);
+  border: 1px solid var(--c-brass, #B68C48);
+  border-radius: 1.5rem;
+  padding: 3.25rem 2.75rem 2.5rem 2.75rem;
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+  color: #FFFFFF;
+  box-shadow: 
+    0 30px 80px -10px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(182, 140, 72, 0.22);
+  animation: guestWelcomePop 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes guestWelcomePop {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Close / Dismiss Button */
+.guest-welcome-close-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(182, 140, 72, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.guest-welcome-close-btn:hover {
+  background: rgba(182, 140, 72, 0.2);
+  color: #FFFFFF;
+  border-color: var(--c-brass, #B68C48);
+  transform: rotate(90deg);
+}
+
+/* Emblem / Monogram */
+.guest-welcome-emblem {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1.5rem auto;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(182, 140, 72, 0.25) 0%, rgba(22, 46, 36, 0.6) 100%);
+  border: 1.5px solid var(--c-brass, #B68C48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  box-shadow: 0 0 25px rgba(182, 140, 72, 0.35);
+}
+
+.guest-welcome-eyebrow {
+  display: block;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.72rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--c-brass-light, #D4AF6E);
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+.guest-welcome-title {
+  font-family: var(--font-family-serif, 'Playfair Display', Georgia, serif);
+  font-size: 2.1rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #FFFFFF;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.01em;
+}
+
+.guest-welcome-subtitle {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: var(--c-brass-light, #D4AF6E);
+  margin: 0 0 1.25rem 0;
+  letter-spacing: 0.02em;
+}
+
+.guest-welcome-quote {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.65;
+  margin: 0 0 2.25rem 0;
+  font-weight: 300;
+}
+
+/* Actions */
+.guest-welcome-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.guest-welcome-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  background: var(--c-brass, #B68C48);
+  color: #FFFFFF;
+  border: none;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.75rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(182, 140, 72, 0.35);
+  transition: all 0.25s ease;
+}
+
+.guest-welcome-btn-primary:hover {
+  background: var(--c-brass-hover, #9E773A);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(182, 140, 72, 0.45);
+}
+
+.guest-welcome-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.6rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.guest-welcome-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Brand Signature */
+.guest-welcome-signature {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(182, 140, 72, 0.7);
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(182, 140, 72, 0.2);
+}
+
+.guest-welcome-dot {
+  color: var(--c-brass, #B68C48);
+}
+
+/* Accessibility: prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .guest-welcome-overlay {
+    animation: none;
+  }
+  .guest-welcome-card {
+    animation: none;
+    transform: none;
+  }
+  .guest-welcome-btn-primary,
+  .guest-welcome-btn-secondary,
+  .guest-welcome-close-btn {
+    transition: none;
+    transform: none !important;
+  }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 600px) {
+  .guest-welcome-card {
+    padding: 2.5rem 1.5rem 1.75rem 1.5rem;
+    border-radius: 1.25rem;
+  }
+
+  .guest-welcome-title {
+    font-size: 1.65rem;
+  }
+
+  .guest-welcome-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .guest-welcome-quote {
+    font-size: 0.84rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .guest-welcome-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .guest-welcome-btn-primary,
+  .guest-welcome-btn-secondary {
+    width: 100%;
+  }
+
+  .guest-welcome-signature {
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+  }
+}

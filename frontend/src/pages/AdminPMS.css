@@ -1,0 +1,651 @@
+/* frontend/src/pages/AdminPMS.css */
+/* ================================================================
+   Serendib Sanctuary — Hotel Operations Control Center (PMS)
+   Professional, High-Density, Elegant & Enterprise-Ready Architecture
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   1. PMS Topbar & Header Controls
+   ---------------------------------------------------------------- */
+.pms-topbar {
+  height: 64px;
+  background-color: #FFFFFF;
+  border-bottom: 1px solid rgba(22, 46, 36, 0.1);
+  padding: 0 1.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 150;
+  box-shadow: 0 1px 3px rgba(22, 46, 36, 0.04);
+}
+
+.pms-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.pms-mobile-menu-btn {
+  display: none;
+  background: none;
+  border: 1px solid rgba(22, 46, 36, 0.15);
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  color: #162E24;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.pms-mobile-menu-btn:hover {
+  background-color: rgba(22, 46, 36, 0.06);
+}
+
+.pms-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pms-breadcrumb-category {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-brass, #B68C48);
+}
+
+.pms-breadcrumb-divider {
+  font-size: 0.8rem;
+  color: #94A3B8;
+}
+
+.pms-breadcrumb-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #162E24;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* Right Controls */
+.pms-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.pms-icon-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #FFFFFF;
+  border: 1px solid rgba(22, 46, 36, 0.12);
+  color: #48544F;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.pms-icon-btn:hover {
+  background-color: rgba(22, 46, 36, 0.05);
+  color: #162E24;
+}
+
+.pms-notif-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  background-color: #16A34A;
+  border-radius: 50%;
+  border: 1.5px solid #FFFFFF;
+}
+
+.pms-topbar-divider {
+  width: 1px;
+  height: 24px;
+  background-color: rgba(22, 46, 36, 0.12);
+}
+
+.pms-user-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pms-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.pms-user-pill:hover {
+  background-color: rgba(22, 46, 36, 0.05);
+}
+
+.pms-avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #162E24;
+  color: #FDFCF7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid var(--c-brass, #B68C48);
+}
+
+.pms-user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.pms-user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #162E24;
+  line-height: 1.2;
+}
+
+.pms-user-role {
+  font-size: 0.68rem;
+  color: var(--c-brass, #B68C48);
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.pms-logout-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  background-color: rgba(220, 38, 38, 0.04);
+  color: #DC2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.pms-logout-icon-btn:hover {
+  background-color: #DC2626;
+  color: #FFFFFF;
+}
+
+/* ----------------------------------------------------------------
+   2. Main Viewport & Layout Frame
+   ---------------------------------------------------------------- */
+.pms-main-viewport {
+  background-color: #F8F9FA;
+  min-height: calc(100vh - 64px);
+  padding: 1.75rem 2rem 3rem 2rem;
+  box-sizing: border-box;
+}
+
+/* ----------------------------------------------------------------
+   3. Sidebar Theming (Serendib Sanctuary Operations)
+   ---------------------------------------------------------------- */
+.sidebar {
+  background: #162E24 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-header {
+  padding: 1.25rem 1.5rem !important;
+  background-color: #0E2019;
+  border-bottom: 1px solid rgba(182, 140, 72, 0.2) !important;
+}
+
+.sidebar-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(182, 140, 72, 0.15) !important;
+  border: 1px solid rgba(182, 140, 72, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.sidebar-brand-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #FDFCF7;
+  line-height: 1.2;
+}
+
+.sidebar-brand-sub {
+  font-size: 0.65rem !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase;
+  color: var(--c-brass, #B68C48) !important;
+  margin-top: 0.15rem;
+}
+
+.sidebar-section {
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase;
+  color: rgba(253, 252, 247, 0.45) !important;
+  padding: 0.85rem 1.25rem 0.35rem 1.25rem !important;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem !important;
+  margin: 2px 0.5rem !important;
+  border-radius: 6px !important;
+  font-size: 0.835rem !important;
+  font-weight: 450;
+  color: rgba(253, 252, 247, 0.72) !important;
+  transition: all 0.2s ease !important;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+}
+
+.sidebar-link.active {
+  background: rgba(182, 140, 72, 0.18) !important;
+  color: #FDFCF7 !important;
+  font-weight: 600 !important;
+  border-left: 3px solid var(--c-brass, #B68C48) !important;
+}
+
+.sidebar-link.active svg {
+  color: var(--c-brass, #B68C48) !important;
+  opacity: 1 !important;
+}
+
+.sidebar-footer {
+  background-color: #0E2019 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1rem 1.25rem !important;
+}
+
+/* ----------------------------------------------------------------
+   4. High-Performance KPI Summary Grid
+   ---------------------------------------------------------------- */
+.pms-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.pms-kpi-card {
+  background-color: #FFFFFF;
+  border: 1px solid rgba(22, 46, 36, 0.1);
+  border-radius: 12px;
+  padding: 1.35rem 1.4rem;
+  box-shadow: 0 2px 6px rgba(22, 46, 36, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.pms-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(182, 140, 72, 0.35);
+  box-shadow: 0 8px 20px rgba(22, 46, 36, 0.06);
+}
+
+.pms-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.pms-kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748B;
+}
+
+.pms-kpi-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.pms-kpi-icon-wrap.forest {
+  background-color: rgba(22, 46, 36, 0.08);
+  color: #162E24;
+}
+
+.pms-kpi-icon-wrap.brass {
+  background-color: rgba(182, 140, 72, 0.12);
+  color: #B68C48;
+}
+
+.pms-kpi-icon-wrap.blue {
+  background-color: #EFF6FF;
+  color: #2563EB;
+}
+
+.pms-kpi-icon-wrap.green {
+  background-color: #F0FDF4;
+  color: #16A34A;
+}
+
+.pms-kpi-icon-wrap.red {
+  background-color: #FEF2F2;
+  color: #DC2626;
+}
+
+.pms-kpi-value {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.pms-kpi-subtext {
+  font-size: 0.78rem;
+  color: #64748B;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ----------------------------------------------------------------
+   5. Interactive Room Status Overview Board
+   ---------------------------------------------------------------- */
+.pms-panel-card {
+  background-color: #FFFFFF;
+  border: 1px solid rgba(22, 46, 36, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(22, 46, 36, 0.03);
+  margin-bottom: 1.75rem;
+  overflow: hidden;
+}
+
+.pms-panel-header {
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid rgba(22, 46, 36, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pms-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.pms-panel-title {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #162E24;
+  margin: 0;
+}
+
+.pms-panel-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background-color: #F1F5F9;
+  color: #475569;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.pms-panel-body {
+  padding: 1.5rem;
+}
+
+/* Room Status Distribution Grid */
+.pms-room-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.pms-room-chip {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.pms-room-chip:hover {
+  transform: translateY(-2px);
+  border-color: var(--c-brass, #B68C48);
+  box-shadow: 0 6px 16px rgba(22, 46, 36, 0.06);
+}
+
+.pms-room-chip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.pms-room-number {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.pms-room-floor {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #94A3B8;
+  background: #F8FAFC;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pms-room-type {
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+}
+
+.pms-room-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pms-room-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pms-room-status-dot.available { background-color: #16A34A; }
+.pms-room-status-dot.occupied { background-color: #DC2626; }
+.pms-room-status-dot.cleaning { background-color: #F59E0B; }
+.pms-room-status-dot.maintenance { background-color: #64748B; }
+
+/* ----------------------------------------------------------------
+   6. Quick Operations Actions Grid
+   ---------------------------------------------------------------- */
+.pms-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.pms-action-tile {
+  background-color: #FFFFFF;
+  border: 1px solid rgba(22, 46, 36, 0.1);
+  border-radius: 10px;
+  padding: 1.25rem 1.15rem;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  color: #162E24;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(22, 46, 36, 0.03);
+}
+
+.pms-action-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--c-brass, #B68C48);
+  background-color: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(182, 140, 72, 0.15);
+  color: #162E24;
+}
+
+.pms-action-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: rgba(22, 46, 36, 0.06);
+  color: #162E24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.pms-action-tile:hover .pms-action-tile-icon {
+  background-color: var(--c-brass, #B68C48);
+  color: #FFFFFF;
+}
+
+/* ----------------------------------------------------------------
+   7. Standard Enterprise Data Table Theming
+   ---------------------------------------------------------------- */
+.pms-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.pms-data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+
+.pms-data-table th {
+  background-color: #F8FAFC;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.85rem 1.15rem;
+  border-bottom: 1px solid #E2E8F0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pms-data-table td {
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid #F1F5F9;
+  color: #1E293B;
+  vertical-align: middle;
+}
+
+.pms-data-table tr:hover td {
+  background-color: rgba(182, 140, 72, 0.03);
+}
+
+/* Status Badges */
+.badge-clean {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-clean.confirmed { background-color: #EFF6FF; color: #1D4ED8; }
+.badge-clean.checked-in { background-color: #F0FDF4; color: #15803D; }
+.badge-clean.checked-out { background-color: #F1F5F9; color: #475569; }
+.badge-clean.cancelled { background-color: #FEF2F2; color: #B91C1C; }
+
+/* ----------------------------------------------------------------
+   8. Responsive Adjustments
+   ---------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .pms-mobile-menu-btn {
+    display: flex;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+  }
+
+  .pms-main-viewport {
+    padding: 1.25rem 1rem;
+  }
+
+  .pms-topbar {
+    padding: 0 1rem;
+  }
+
+  .pms-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sa-topbar-property{display:flex;align-items:center;gap:7px;color:#74817a;font-size:10px}.sa-topbar-property select{height:32px;max-width:190px;border:1px solid #dbe3de;border-radius:6px;background:#fff;padding:0 8px;color:#35443e;font:inherit;font-size:10px}@media(max-width:760px){.sa-topbar-property{display:none}}
+
+@media(max-width:760px){.sa-topbar-property{display:flex}.sa-topbar-property span{display:none}.sa-topbar-property select{max-width:115px}}

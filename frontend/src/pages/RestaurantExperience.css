@@ -1,0 +1,1929 @@
+/* frontend/src/pages/RestaurantExperience.css */
+/* ============================================================
+   Serendib Sanctuary — Restaurant Experience Module
+   Cinematic Luxury Hospitality Styling
+   ============================================================ */
+
+/* Root tokens mapped to existing hotel theme */
+.rest-page-root {
+  background-color: var(--c-ivory-light, #FDFCF7);
+  color: var(--c-text-primary, #1C2421);
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Animations */
+@keyframes restFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes restScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes restShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ============================================================
+   1. HERO SECTIONS
+   ============================================================ */
+.rest-hero-cinema {
+  position: relative;
+  min-height: 82vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  padding: 8rem 2rem 5rem 2rem;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rest-hero-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(14, 27, 21, 0.55) 0%,
+    rgba(14, 27, 21, 0.72) 60%,
+    rgba(14, 27, 21, 0.94) 100%
+  );
+  z-index: 1;
+}
+
+.rest-hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 900px;
+  margin: 0 auto;
+  animation: restFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.rest-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.25rem;
+  background: rgba(182, 140, 72, 0.18);
+  border: 1px solid rgba(182, 140, 72, 0.45);
+  border-radius: 999px;
+  color: var(--c-brass-light, #D4AF6E);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(8px);
+}
+
+.rest-hero-title {
+  font-size: clamp(2.4rem, 5.5vw, 4.4rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  margin-bottom: 1.25rem;
+}
+
+.rest-hero-subtitle {
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 300;
+  color: rgba(253, 252, 247, 0.92);
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0 auto 2.5rem auto;
+}
+
+.rest-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.rest-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 2.2rem;
+  background: var(--c-brass, #B68C48);
+  color: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid var(--c-brass, #B68C48);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 24px rgba(182, 140, 72, 0.28);
+  text-decoration: none;
+}
+
+.rest-btn-primary:hover {
+  background: var(--c-brass-hover, #9E773A);
+  border-color: var(--c-brass-hover, #9E773A);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(182, 140, 72, 0.38);
+  color: #FFF;
+}
+
+.rest-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 2.2rem;
+  background: rgba(253, 252, 247, 0.12);
+  color: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid rgba(253, 252, 247, 0.35);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  text-decoration: none;
+}
+
+.rest-btn-secondary:hover {
+  background: rgba(253, 252, 247, 0.22);
+  border-color: #FFFFFF;
+  color: #FFF;
+}
+
+/* ============================================================
+   2. PERSONALIZED GUEST WELCOME BANNER
+   ============================================================ */
+.rest-guest-welcome-bar {
+  background: linear-gradient(90deg, #162E24 0%, #203E50 100%);
+  color: #FFF;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid rgba(182, 140, 72, 0.25);
+}
+
+.rest-welcome-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.rest-welcome-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+}
+
+.rest-welcome-badge {
+  background: var(--c-brass);
+  color: #fff;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   3. EDITORIAL SHOWCASE SECTION
+   ============================================================ */
+.rest-showcase-section {
+  padding: 6.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.rest-section-header {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto 4.5rem auto;
+}
+
+.rest-section-badge {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-brass, #B68C48);
+  margin-bottom: 0.75rem;
+}
+
+.rest-section-title {
+  font-size: clamp(2rem, 3.8vw, 3rem);
+  font-weight: 600;
+  color: var(--c-forest-deep, #162E24);
+  line-height: 1.25;
+  margin-bottom: 1rem;
+}
+
+.rest-section-desc {
+  font-size: 1.05rem;
+  color: var(--c-text-secondary, #48544F);
+  line-height: 1.7;
+}
+
+/* Split Editorial Card Layout */
+.rest-card-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(22, 46, 36, 0.07);
+  border: 1px solid var(--c-border-light, rgba(34, 66, 52, 0.08));
+  margin-bottom: 4rem;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.rest-card-split:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 24px 54px rgba(22, 46, 36, 0.13);
+  border-color: rgba(182, 140, 72, 0.35);
+}
+
+.rest-card-split:focus-visible {
+  outline: 3px solid var(--c-brass, #B68C48);
+  outline-offset: 4px;
+}
+
+/* Activate primary CTA inside card when entire card is hovered */
+.rest-card-split:hover .rest-btn-primary {
+  background: var(--c-brass-hover, #9E773A);
+  border-color: var(--c-brass-hover, #9E773A);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(182, 140, 72, 0.38);
+}
+
+.rest-card-split.reverse {
+  direction: rtl;
+}
+
+.rest-card-split.reverse > * {
+  direction: ltr;
+}
+
+.rest-card-image-wrap {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  background: #162E24;
+  cursor: pointer;
+}
+
+.rest-card-image-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(22, 46, 36, 0.05) 0%, rgba(22, 46, 36, 0.32) 100%);
+  opacity: 0.55;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.rest-card-split:hover .rest-card-image-wrap::after {
+  opacity: 0.88;
+}
+
+.rest-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rest-card-split:hover .rest-card-img {
+  transform: scale(1.045);
+}
+
+.rest-card-tag {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  background: rgba(22, 46, 36, 0.88);
+  backdrop-filter: blur(8px);
+  color: var(--c-brass-light, #D4AF6E);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid rgba(182, 140, 72, 0.3);
+}
+
+.rest-card-body {
+  padding: 3.5rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.rest-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.82rem;
+  color: var(--c-brass, #B68C48);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.rest-card-name {
+  font-size: 2.2rem;
+  font-weight: 600;
+  color: var(--c-forest-deep, #162E24);
+  line-height: 1.25;
+  margin-bottom: 0.75rem;
+}
+
+.rest-card-name-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.rest-card-split:hover .rest-card-name-link,
+.rest-card-name-link:hover {
+  color: var(--c-brass, #B68C48);
+}
+
+.rest-card-tagline {
+  font-size: 1.05rem;
+  font-style: italic;
+  color: var(--c-earth, #5C4535);
+  margin-bottom: 1.25rem;
+}
+
+.rest-card-desc {
+  font-size: 0.95rem;
+  color: var(--c-text-secondary, #48544F);
+  line-height: 1.7;
+  margin-bottom: 1.75rem;
+}
+
+.rest-card-specs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--c-sand-subtle, #F3EFE6);
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.rest-spec-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.84rem;
+  color: var(--c-text-primary);
+}
+
+.rest-spec-icon {
+  color: var(--c-brass);
+  font-size: 0.95rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.rest-spec-item strong {
+  display: block;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-muted, #74807B);
+  font-weight: 500;
+}
+
+.rest-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   4. RESTAURANT DETAIL PAGE
+   ============================================================ */
+.rest-detail-header {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: flex-end;
+  padding: 6rem 2.5rem 4.5rem 2.5rem;
+  background-size: cover;
+  background-position: center;
+  color: #FFF;
+}
+
+.rest-detail-header-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(22, 46, 36, 0.4) 0%, rgba(22, 46, 36, 0.88) 100%);
+  z-index: 1;
+}
+
+.rest-detail-header-content {
+  position: relative;
+  z-index: 2;
+  max-width: 1360px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Navigation Anchor Bar */
+.rest-anchor-bar {
+  position: sticky;
+  top: 70px;
+  z-index: 900;
+  background: rgba(253, 252, 247, 0.96);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--c-border-light);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.rest-anchor-inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 2rem;
+  overflow-x: auto;
+}
+
+.rest-anchor-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rest-anchor-link {
+  color: var(--c-text-secondary);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0.4rem 0.2rem;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.rest-anchor-link:hover,
+.rest-anchor-link.active {
+  color: var(--c-forest-deep);
+  border-bottom-color: var(--c-brass);
+}
+
+/* Story / Philosophy Section */
+.rest-story-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4.5rem;
+  align-items: center;
+  padding: 5rem 2rem;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.rest-story-quote {
+  font-size: 1.4rem;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--c-forest-deep);
+  border-left: 3px solid var(--c-brass);
+  padding-left: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.rest-chef-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: var(--c-sand-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--c-border-light);
+}
+
+.rest-chef-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--c-brass);
+}
+
+/* Menu Display */
+.rest-menu-section {
+  padding: 5rem 2rem;
+  background: #FFF;
+  border-top: 1px solid var(--c-border-light);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.rest-menu-container {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.rest-category-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+.rest-cat-tab-btn {
+  padding: 0.65rem 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--c-border-medium, rgba(34, 66, 52, 0.14));
+  background: var(--c-ivory-light);
+  color: var(--c-text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.rest-cat-tab-btn:hover {
+  border-color: var(--c-brass);
+  color: var(--c-brass-hover);
+}
+
+.rest-cat-tab-btn.active {
+  background: var(--c-forest-deep);
+  color: #FFF;
+  border-color: var(--c-forest-deep);
+  box-shadow: 0 4px 14px rgba(22, 46, 36, 0.18);
+}
+
+.rest-dietary-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 3.5rem;
+  font-size: 0.8rem;
+}
+
+.rest-dietary-pill {
+  padding: 0.3rem 0.85rem;
+  border-radius: 20px;
+  background: var(--c-sand-subtle);
+  border: 1px solid transparent;
+  color: var(--c-text-secondary);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: all 0.2s ease;
+}
+
+.rest-dietary-pill.active {
+  background: var(--c-brass-subtle);
+  border-color: var(--c-brass);
+  color: var(--c-forest-deep);
+  font-weight: 600;
+}
+
+.rest-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 2.5rem;
+}
+
+.rest-menu-item-card {
+  background: var(--c-ivory-light);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--c-border-light);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.rest-menu-item-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(22, 46, 36, 0.08);
+  border-color: var(--c-border-brass);
+}
+
+.rest-menu-item-image {
+  height: 200px;
+  width: 100%;
+  object-fit: cover;
+  background: #203E50;
+}
+
+.rest-menu-item-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.rest-menu-item-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.rest-menu-item-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--c-forest-deep);
+}
+
+.rest-menu-item-price {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--c-brass);
+  white-space: nowrap;
+}
+
+.rest-menu-item-desc {
+  font-size: 0.88rem;
+  color: var(--c-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  flex: 1;
+}
+
+.rest-menu-item-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.rest-tag-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(34, 66, 52, 0.07);
+  color: var(--c-forest-light);
+}
+
+/* ============================================================
+   5. INTERNATIONAL BUFFET SECTION
+   ============================================================ */
+.rest-buffet-section {
+  padding: 6.5rem 2rem;
+  background: linear-gradient(180deg, #162E24 0%, #162B38 100%);
+  color: #FFF;
+}
+
+.rest-buffet-container {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.rest-buffet-hero-banner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+  margin-bottom: 4rem;
+}
+
+.rest-buffet-sessions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 2rem;
+}
+
+.rest-buffet-card {
+  background: rgba(253, 252, 247, 0.07);
+  border: 1px solid rgba(182, 140, 72, 0.3);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.rest-buffet-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--c-brass);
+}
+
+.rest-buffet-card-img {
+  height: 220px;
+  width: 100%;
+  object-fit: cover;
+}
+
+.rest-buffet-card-body {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.rest-buffet-period-badge {
+  color: var(--c-brass-light);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.rest-buffet-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #FFF;
+  margin-bottom: 0.5rem;
+}
+
+.rest-buffet-time {
+  font-size: 0.88rem;
+  color: rgba(253, 252, 247, 0.8);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.rest-buffet-prices {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1.25rem 0;
+}
+
+.rest-buffet-price-row span {
+  font-size: 0.74rem;
+  color: rgba(253, 252, 247, 0.65);
+  display: block;
+  text-transform: uppercase;
+}
+
+.rest-buffet-price-row strong {
+  font-size: 1.05rem;
+  color: var(--c-brass-light);
+}
+
+.rest-buffet-highlights {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem 0;
+  font-size: 0.84rem;
+  color: rgba(253, 252, 247, 0.85);
+  line-height: 1.6;
+}
+
+.rest-buffet-highlights li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.rest-buffet-highlights li::before {
+  content: '✓';
+  color: var(--c-brass-light);
+  font-weight: 700;
+}
+
+/* ============================================================
+   6. OFFERS & EXPERIENCES SECTION & MODAL
+   ============================================================ */
+.rest-offers-section {
+  padding: 6rem 2rem;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.rest-offers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 2.5rem;
+}
+
+.rest-offer-card {
+  background: #FFF;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--c-border-light);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.rest-offer-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(22, 46, 36, 0.12);
+  border-color: var(--c-border-brass);
+}
+
+.rest-offer-card-media {
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+}
+
+.rest-offer-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+
+.rest-offer-card:hover .rest-offer-card-img {
+  transform: scale(1.06);
+}
+
+.rest-offer-discount-pill {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: var(--c-brass);
+  color: #FFF;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.35rem 0.8rem;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.rest-offer-card-body {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.rest-offer-card-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--c-forest-deep);
+  margin-bottom: 0.65rem;
+}
+
+.rest-offer-card-desc {
+  font-size: 0.9rem;
+  color: var(--c-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+  flex: 1;
+}
+
+.rest-offer-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--c-border-light);
+  padding-top: 1.25rem;
+}
+
+.rest-offer-card-price {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--c-forest-deep);
+}
+
+/* Beautiful Large Offer Modal (Requirement 14) */
+.rest-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(14, 27, 21, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+
+.rest-offer-modal-panel {
+  background: #FFF;
+  border-radius: 12px;
+  max-width: 780px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 32px 72px rgba(0, 0, 0, 0.35);
+  position: relative;
+  animation: restScaleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  border: 1px solid rgba(182, 140, 72, 0.3);
+}
+
+.rest-modal-close-btn {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(22, 46, 36, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.rest-modal-close-btn:hover {
+  background: rgba(22, 46, 36, 0.95);
+  transform: rotate(90deg);
+}
+
+.rest-offer-modal-media {
+  height: 340px;
+  position: relative;
+  background: #162E24;
+}
+
+.rest-offer-modal-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rest-offer-modal-body {
+  padding: 2.5rem 3rem 3rem 3rem;
+}
+
+.rest-inclusions-list {
+  background: var(--c-sand-subtle);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  list-style: none;
+}
+
+.rest-inclusions-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+  color: var(--c-text-primary);
+  margin-bottom: 0.65rem;
+}
+
+.rest-inclusions-list li:last-child {
+  margin-bottom: 0;
+}
+
+.rest-inclusions-list li svg {
+  color: var(--c-brass);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   7. PHOTO GALLERY & LIGHTBOX
+   ============================================================ */
+.rest-gallery-section {
+  padding: 6rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.rest-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: 240px;
+  gap: 1.5rem;
+}
+
+.rest-gallery-item {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.rest-gallery-item.featured {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.rest-gallery-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s ease;
+}
+
+.rest-gallery-item:hover .rest-gallery-img {
+  transform: scale(1.08);
+}
+
+.rest-gallery-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(22, 46, 36, 0.85) 100%);
+  display: flex;
+  align-items: flex-end;
+  padding: 1.25rem;
+  color: #FFF;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.rest-gallery-item:hover .rest-gallery-overlay {
+  opacity: 1;
+}
+
+/* Lightbox Modal */
+.rest-lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(14, 27, 21, 0.95);
+  backdrop-filter: blur(16px);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.rest-lightbox-content {
+  position: relative;
+  max-width: 1100px;
+  width: 100%;
+  text-align: center;
+}
+
+.rest-lightbox-img {
+  max-height: 80vh;
+  max-width: 100%;
+  border-radius: 6px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  object-fit: contain;
+}
+
+.rest-lightbox-caption {
+  color: var(--c-ivory);
+  font-size: 1rem;
+  margin-top: 1rem;
+  font-weight: 400;
+}
+
+.rest-lightbox-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #FFF;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rest-lightbox-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.rest-lightbox-prev { left: -60px; }
+.rest-lightbox-next { right: -60px; }
+
+/* ============================================================
+   8. RESERVATION MODAL
+   ============================================================ */
+.rest-res-modal-panel {
+  background: #FFFFFF;
+  border-radius: 12px;
+  max-width: 720px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.3);
+  position: relative;
+  animation: restScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.rest-res-modal-header {
+  background: var(--c-forest-deep);
+  color: #FFF;
+  padding: 2rem 2.5rem;
+  position: relative;
+}
+
+.rest-res-modal-body {
+  padding: 2.5rem;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.rest-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.rest-form-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c-forest-deep);
+  margin-bottom: 0.5rem;
+}
+
+.rest-form-input,
+.rest-form-select,
+.rest-form-textarea {
+  width: 100%;
+  padding: 0.85rem 1.15rem;
+  border: 1px solid var(--c-border-medium);
+  border-radius: 6px;
+  background: var(--c-ivory-light);
+  color: var(--c-text-primary);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rest-form-input:focus,
+.rest-form-select:focus,
+.rest-form-textarea:focus {
+  outline: none;
+  border-color: var(--c-brass);
+  box-shadow: 0 0 0 3px rgba(182, 140, 72, 0.15);
+}
+
+.rest-guest-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rest-guest-type-option {
+  padding: 1rem;
+  border: 2px solid var(--c-border-medium);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.rest-guest-type-option.selected {
+  border-color: var(--c-brass);
+  background: var(--c-brass-subtle);
+}
+
+.rest-hotel-lookup-box {
+  background: var(--c-sand-subtle);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--c-border-brass);
+}
+
+/* Confirmation Screen */
+.rest-confirmation-screen {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.rest-confirmation-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--c-brass-subtle);
+  color: var(--c-brass);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  margin: 0 auto 1.5rem auto;
+}
+
+.rest-confirmation-ref {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  background: var(--c-sand-subtle);
+  border: 1px dashed var(--c-brass);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--c-forest-deep);
+  margin: 1rem 0 2rem 0;
+}
+
+.rest-confirmation-details-box {
+  background: var(--c-ivory);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+  max-width: 480px;
+  margin: 0 auto 2rem auto;
+  border: 1px solid var(--c-border-light);
+}
+
+/* ============================================================
+   9. ADMIN RESTAURANT PMS MODULE
+   ============================================================ */
+.rest-admin-wrap {
+  padding: 2rem;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.rest-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.rest-admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.rest-stat-card {
+  background: #FFF;
+  border-radius: 8px;
+  padding: 1.25rem;
+  border: 1px solid var(--c-border-light);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.rest-stat-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--c-sand-subtle);
+  color: var(--c-forest-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.rest-stat-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--c-forest-deep);
+  line-height: 1.1;
+}
+
+.rest-stat-lbl {
+  font-size: 0.78rem;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.2rem;
+}
+
+.rest-admin-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--c-border-light);
+  margin-bottom: 2rem;
+  overflow-x: auto;
+}
+
+.rest-admin-tab-btn {
+  padding: 0.85rem 1.4rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--c-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rest-admin-tab-btn:hover {
+  color: var(--c-forest-deep);
+}
+
+.rest-admin-tab-btn.active {
+  color: var(--c-forest-deep);
+  border-bottom-color: var(--c-brass);
+}
+
+.rest-admin-table-container {
+  background: #FFF;
+  border-radius: 8px;
+  border: 1px solid var(--c-border-light);
+  box-shadow: var(--shadow-soft);
+  overflow-x: auto;
+}
+
+.rest-pms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.rest-pms-table th {
+  background: var(--c-sand-subtle);
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.rest-pms-table td {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--c-border-light);
+  vertical-align: middle;
+}
+
+.rest-pms-table tr:hover td {
+  background: var(--c-ivory-light);
+}
+
+.rest-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rest-status-badge.confirmed { background: #E8F5E9; color: #2E7D32; }
+.rest-status-badge.seated { background: #E3F2FD; color: #1565C0; }
+.rest-status-badge.completed { background: #EDE7F6; color: #512DA8; }
+.rest-status-badge.cancelled { background: #FFEBEE; color: #C62828; }
+.rest-status-badge.available { background: #E8F5E9; color: #2E7D32; }
+.rest-status-badge.occupied { background: #FFF3E0; color: #E65100; }
+
+/* Sticky Mobile Reserve Bar */
+.rest-mobile-sticky-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(22, 46, 36, 0.96);
+  backdrop-filter: blur(12px);
+  padding: 0.85rem 1.25rem;
+  z-index: 990;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 900px) {
+  .rest-card-split {
+    grid-template-columns: 1fr;
+  }
+  .rest-card-image-wrap {
+    min-height: 320px;
+  }
+  .rest-card-body {
+    padding: 2.25rem 1.5rem;
+  }
+  .rest-story-grid {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+  .rest-buffet-hero-banner {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .rest-mobile-sticky-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .rest-lightbox-prev { left: 10px; }
+  .rest-lightbox-next { right: 10px; }
+}
+
+@media (max-width: 600px) {
+  .rest-hero-cinema {
+    padding: 7rem 1.25rem 4rem 1.25rem;
+    min-height: 70vh;
+  }
+  .rest-menu-grid,
+  .rest-buffet-sessions-grid,
+  .rest-offers-grid {
+    grid-template-columns: 1fr;
+  }
+  .rest-card-specs {
+    grid-template-columns: 1fr;
+  }
+  .rest-guest-type-toggle {
+    grid-template-columns: 1fr;
+  }
+  .rest-res-modal-body,
+  .rest-offer-modal-body {
+    padding: 1.5rem;
+  }
+}
+
+
+/* Refined menu browsing and dining offer cards */
+.rest-menu-section .rest-section-title { font-size: clamp(1.8rem, 3.2vw, 2.5rem); font-weight: 500; }
+.rest-menu-section .rest-section-desc { font-size: 0.98rem; }
+.rest-category-tabs { gap: 0.55rem; margin-bottom: 1.65rem; }
+.rest-cat-tab-btn { padding: 0.55rem 1.15rem; font-size: 0.78rem; font-weight: 500; letter-spacing: 0.025em; text-transform: none; }
+.rest-cat-tab-btn:focus-visible, .rest-dietary-pill:focus-visible, .rest-offer-card:focus-visible { outline: 3px solid var(--c-brass); outline-offset: 3px; }
+.rest-dietary-filter-bar { margin-bottom: 2.25rem; }
+.rest-menu-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1.5rem; }
+.rest-menu-item-image { height: 170px; }
+.rest-menu-item-content { padding: 1.25rem; }
+.rest-menu-item-header { align-items: flex-start; gap: 0.75rem; }
+.rest-menu-item-name-wrap { min-width: 0; }
+.rest-menu-item-name { margin: 0; font-size: 1.05rem; line-height: 1.4; overflow-wrap: anywhere; }
+.rest-menu-item-category { display: inline-block; margin-top: 0.35rem; color: var(--c-text-muted); font-size: 0.7rem; letter-spacing: 0.025em; }
+.rest-menu-item-price { flex: 0 0 auto; font-size: 1rem; }
+.rest-menu-item-desc { font-size: 0.86rem; line-height: 1.55; }
+.rest-menu-item-tags { gap: 0.35rem; }
+.rest-menu-item-tags .rest-tag-pill { overflow-wrap: anywhere; }
+.rest-offers-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 1.5rem; }
+.rest-offer-card { width: 100%; min-width: 0; padding: 0; appearance: none; border: 1px solid var(--c-border-light); color: inherit; font: inherit; text-align: left; }
+.rest-offer-card:focus-visible { border-radius: 10px; }
+.rest-offer-card-media { height: 215px; background: var(--c-sand-subtle); }
+.rest-offer-card-body { padding: 1.4rem; }
+.rest-offer-card-title { margin: 0 0 0.5rem; font-size: 1.2rem; line-height: 1.35; }
+.rest-offer-card-desc { margin-bottom: 0.85rem; font-size: 0.86rem; }
+.rest-offer-card-details { display: flex; flex-wrap: wrap; gap: 0.45rem 0.85rem; margin-bottom: 1rem; color: var(--c-text-muted); font-size: 0.74rem; line-height: 1.45; }
+.rest-offer-card-details span { display: inline-flex; align-items: flex-start; gap: 0.35rem; }
+.rest-offer-card-details svg { flex: 0 0 auto; margin-top: 0.12rem; color: var(--c-brass); }
+.rest-offer-card-footer { gap: 0.75rem; padding-top: 0.9rem; }
+.rest-offer-price-label { display: block; margin-bottom: 0.15rem; color: var(--c-text-muted); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.rest-offer-card-price { font-size: 1rem; }
+.rest-offer-view-details { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--c-brass); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.rest-offer-card:hover .rest-offer-view-details { color: var(--c-brass-hover); }
+.rest-offers-empty { max-width: 720px; margin: 0 auto; padding: 2rem; border: 1px solid var(--c-border-light); border-radius: 10px; background: var(--c-ivory-light); color: var(--c-text-secondary); text-align: center; line-height: 1.6; }
+@media (max-width: 640px) {
+  .rest-menu-section { padding: 3.75rem 1rem; }
+  .rest-category-tabs { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; padding: 0.2rem 0.1rem 0.65rem; margin-right: -0.25rem; scrollbar-width: thin; }
+  .rest-cat-tab-btn { flex: 0 0 auto; white-space: nowrap; }
+  .rest-dietary-filter-bar { justify-content: flex-start; margin-bottom: 1.5rem; }
+  .rest-menu-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .rest-menu-item-header { flex-wrap: wrap; }
+  .rest-menu-item-price { margin-left: auto; }
+  .rest-offers-section { padding: 4rem 1rem; }
+  .rest-offers-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .rest-offer-card-media { height: 200px; }
+}
+
+.rest-offer-modal-details { display: flex; flex-wrap: wrap; gap: 0.6rem 1.25rem; margin: -0.35rem 0 1.5rem; color: var(--c-text-muted); font-size: 0.84rem; line-height: 1.5; }
+.rest-offer-modal-details span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.rest-offer-modal-details svg { flex: 0 0 auto; color: var(--c-brass); }
+
+
+/* Premium dining offer presentation */
+.rest-offers-section {
+  padding: clamp(3.5rem, 6vw, 5.25rem) clamp(1rem, 4vw, 2.5rem);
+  margin-top: 1rem;
+  border: 1px solid var(--c-border-light);
+  border-radius: 16px;
+  background: var(--c-ivory-light);
+}
+
+.rest-offers-section .rest-section-header {
+  max-width: 760px;
+  margin: 0 auto 2.5rem;
+}
+
+.rest-offers-section .rest-section-title {
+  font-size: clamp(1.85rem, 3.2vw, 2.55rem);
+  line-height: 1.2;
+}
+
+.rest-offers-section .rest-section-desc {
+  max-width: 650px;
+}
+
+.rest-offers-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 1.35rem;
+  align-items: stretch;
+}
+
+.rest-offer-card {
+  min-height: 100%;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(22, 46, 36, 0.07);
+}
+
+.rest-offer-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px rgba(22, 46, 36, 0.13);
+}
+
+.rest-offer-card-media {
+  height: clamp(190px, 19vw, 235px);
+  background: var(--c-sand-subtle);
+}
+
+.rest-offer-card-body {
+  padding: clamp(1.1rem, 2vw, 1.45rem);
+}
+
+.rest-offer-card-title {
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-card-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.rest-offer-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+
+.rest-offer-card-details span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-card-footer {
+  margin-top: auto;
+}
+
+.rest-offer-view-details {
+  min-height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .rest-offers-section {
+    padding: 3.5rem 1rem;
+    border-radius: 10px;
+  }
+
+  .rest-offer-card-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rest-offer-card-footer {
+    align-items: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-offer-card,
+  .rest-offer-card-img {
+    transition: none;
+  }
+}
+
+
+.rest-offer-card-terms {
+  margin: 0 0 1rem;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-modal-panel {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.rest-offer-modal-media img {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .rest-offer-modal-panel {
+    max-height: calc(100vh - 1rem);
+  }
+
+  .rest-offer-modal-media {
+    height: 230px;
+  }
+}
+
+
+/* Image-led offer layout for the live dining page. */
+.rest-offers-section {
+  padding: clamp(3.5rem, 6vw, 5rem) clamp(1rem, 3vw, 2rem);
+  margin: 1rem auto;
+  border: 1px solid var(--c-border-light);
+  border-radius: 16px;
+  background: var(--c-ivory-light);
+}
+.rest-offers-section .rest-section-header { max-width: 760px; margin: 0 auto 2.5rem; }
+.rest-offers-section .rest-section-title { font-size: clamp(1.85rem, 3.2vw, 2.55rem); line-height: 1.2; }
+.rest-offers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.35rem; align-items: stretch; }
+.rest-offer-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  min-height: 310px;
+  border: 1px solid var(--c-border-medium);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(22, 46, 36, 0.09);
+}
+.rest-offer-card:hover { transform: translateY(-4px); box-shadow: 0 18px 36px rgba(22, 46, 36, 0.15); }
+.rest-offer-card-media { height: 100%; min-height: 310px; background: var(--c-sand-subtle); }
+.rest-offer-card-img { display: block; }
+.rest-offer-card-body { min-width: 0; padding: clamp(1rem, 1.6vw, 1.45rem); }
+.rest-offer-card-title { margin: 0 0 0.55rem; font-size: clamp(1.05rem, 1.35vw, 1.25rem); line-height: 1.35; overflow-wrap: anywhere; }
+.rest-offer-card-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  margin-bottom: 0.9rem;
+  font-size: 0.84rem;
+}
+.rest-offer-card-details { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.45rem; }
+.rest-offer-card-details span { min-width: 0; overflow-wrap: anywhere; }
+.rest-offer-card-terms {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0 0 0.85rem;
+  color: var(--c-text-muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.rest-offer-card-footer { margin-top: auto; gap: 0.6rem; }
+.rest-offer-view-details { min-height: 2.5rem; }
+.rest-offer-modal-panel { max-height: calc(100vh - 2rem); overflow-y: auto; }
+.rest-offer-modal-media img { display: block; }
+@media (max-width: 1050px) {
+  .rest-offers-grid { grid-template-columns: minmax(0, 1fr); }
+  .rest-offer-card { grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr); }
+}
+@media (max-width: 640px) {
+  .rest-offers-section { padding: 3.5rem 1rem; border-radius: 10px; }
+  .rest-offer-card { display: flex; flex-direction: column; }
+  .rest-offer-card-media { height: 220px; min-height: 220px; }
+  .rest-offer-card-body { padding: 1.2rem; }
+  .rest-offer-card-footer { align-items: flex-end; }
+  .rest-offer-modal-panel { max-height: calc(100vh - 1rem); }
+  .rest-offer-modal-media { height: 230px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rest-offer-card, .rest-offer-card-img { transition: none; }
+}
+
+
+/* Full promotional card collection for Special Dining Offers & Experiences. */
+.rest-offers-section {
+  max-width: 1440px;
+  padding: clamp(3.75rem, 6vw, 5.5rem) clamp(1rem, 3vw, 2.5rem);
+  margin: 1rem auto;
+  border: 1px solid var(--c-border-light);
+  border-radius: 16px;
+  background: var(--c-ivory-light);
+}
+
+.rest-offers-section .rest-section-header {
+  max-width: 760px;
+  margin: 0 auto 2.5rem;
+}
+
+.rest-offers-section .rest-section-title {
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.2;
+}
+
+.rest-offers-section .rest-section-desc {
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+.rest-offers-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.35rem;
+  align-items: stretch;
+}
+
+.rest-offer-card {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex-direction: column;
+  border: 1px solid var(--c-border-light);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(22, 46, 36, 0.08);
+}
+
+.rest-offer-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(22, 46, 36, 0.15);
+}
+
+.rest-offer-card-media {
+  position: relative;
+  height: 225px;
+  min-height: 225px;
+  overflow: hidden;
+  background: var(--c-sand-subtle);
+}
+
+.rest-offer-card-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.55s ease;
+}
+
+.rest-offer-card:hover .rest-offer-card-img {
+  transform: scale(1.045);
+}
+
+.rest-offer-concept-badge {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(22, 46, 36, 0.84);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rest-offer-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.35rem;
+}
+
+.rest-offer-card-title {
+  margin: 0 0 0.55rem;
+  font-size: 1.12rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-card-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  margin-bottom: 1rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.rest-offer-card-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.76rem;
+}
+
+.rest-offer-card-details span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-card-terms {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0 0 0.8rem;
+  color: var(--c-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rest-offer-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.9rem;
+}
+
+.rest-offer-view-details {
+  min-height: 2.6rem;
+  white-space: normal;
+}
+
+@media (max-width: 1000px) {
+  .rest-offers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .rest-offers-section {
+    padding: 3.5rem 1rem;
+    border-radius: 10px;
+  }
+
+  .rest-offers-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .rest-offer-card-media {
+    height: 215px;
+    min-height: 215px;
+  }
+
+  .rest-offer-card-body {
+    padding: 1.2rem;
+  }
+
+  .rest-offer-card-footer {
+    align-items: flex-end;
+  }
+}

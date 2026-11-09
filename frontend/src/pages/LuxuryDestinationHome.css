@@ -1,0 +1,1781 @@
+/* frontend/src/pages/LuxuryDestinationHome.css */
+/* ============================================================
+   Original Sri Lankan Luxury Hospitality Design System
+   Serendib Sanctuary Palette & Poppins Typography
+   ============================================================ */
+
+:root {
+  /* Color Palette */
+  --c-ivory-light: #FDFCF7;
+  --c-ivory: #F7F4EC;
+  --c-ivory-dark: #EDE7D9;
+  --c-sand: #DFD5C3;
+  --c-sand-subtle: #F3EFE6;
+  
+  --c-forest-deep: #162E24;
+  --c-forest: #224234;
+  --c-forest-light: #345B4A;
+  
+  --c-ocean-deep: #162B38;
+  --c-ocean: #203E50;
+  
+  --c-earth-deep: #38291F;
+  --c-earth: #5C4535;
+  --c-earth-light: #846853;
+  
+  --c-brass: #B68C48;
+  --c-brass-hover: #9E773A;
+  --c-brass-light: #D4AF6E;
+  --c-brass-subtle: rgba(182, 140, 72, 0.12);
+
+  --c-text-primary: #1C2421;
+  --c-text-secondary: #48544F;
+  --c-text-muted: #74807B;
+  --c-text-light: #F7F5F0;
+  
+  --c-border-light: rgba(34, 66, 52, 0.08);
+  --c-border-medium: rgba(34, 66, 52, 0.14);
+  --c-border-brass: rgba(182, 140, 72, 0.35);
+
+  /* Shadows - Soft Natural Lighting */
+  --shadow-soft: 0 4px 20px -2px rgba(22, 46, 36, 0.05);
+  --shadow-elevated: 0 16px 36px -4px rgba(22, 46, 36, 0.08);
+  --shadow-editorial: 0 24px 48px -8px rgba(22, 46, 36, 0.12);
+
+  /* Transitions */
+  --trans-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --trans-fast: all 0.2s ease-out;
+
+  /* Typography Scale */
+  --font-family-primary: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ============================================================
+   Base Setup & Reset
+   ============================================================ */
+.dest-page-root {
+  background-color: var(--c-ivory-light);
+  color: var(--c-text-primary);
+  font-family: var(--font-family-primary);
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   1. Luxury Navigation Header
+   ============================================================ */
+.dest-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 1.25rem 2.5rem;
+  transition: var(--trans-smooth);
+  background: transparent;
+}
+
+.dest-nav.scrolled {
+  background: rgba(253, 252, 247, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 24px rgba(22, 46, 36, 0.06);
+  border-bottom: 1px solid var(--c-border-light);
+  padding: 0.9rem 2.5rem;
+}
+
+.dest-nav-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Left: Hamburger Menu Trigger */
+.dest-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.dest-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #FFFFFF;
+  padding: 0.6rem 1.1rem;
+  border-radius: 2rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--trans-fast);
+}
+
+.dest-nav.scrolled .dest-menu-btn {
+  border-color: var(--c-border-medium);
+  color: var(--c-forest-deep);
+}
+
+.dest-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.dest-nav.scrolled .dest-menu-btn:hover {
+  background: var(--c-ivory);
+  border-color: var(--c-forest);
+}
+
+.dest-menu-icon {
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Center: Main Navigation (Desktop) */
+.dest-nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.dest-brand-link {
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: var(--trans-smooth);
+}
+
+.dest-brand-title {
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.dest-brand-sub {
+  font-size: 0.6rem;
+  font-weight: 300;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--c-brass-light);
+  margin-top: 0.2rem;
+}
+
+.dest-nav.scrolled .dest-brand-title {
+  color: var(--c-forest-deep);
+}
+
+.dest-nav.scrolled .dest-brand-sub {
+  color: var(--c-brass);
+}
+
+/* Right: Customer Actions & Booking CTA */
+.dest-nav-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.15rem;
+}
+
+.dest-book-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--c-brass);
+  color: #FFFFFF;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.65rem 1.35rem;
+  border-radius: 2rem;
+  box-shadow: 0 4px 14px rgba(182, 140, 72, 0.28);
+  transition: var(--trans-fast);
+  border: none;
+  cursor: pointer;
+}
+
+.dest-book-btn:hover {
+  background: var(--c-brass-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(182, 140, 72, 0.38);
+}
+
+/* ============================================================
+   2. Fullscreen Luxury Menu Drawer
+   ============================================================ */
+.dest-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 30, 24, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.dest-drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dest-drawer-panel {
+position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 580px;
+  background: var(--c-ivory-light);
+  z-index: 2001;
+  transform: translateX(-100%);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.2);
+  overflow-y: auto;
+}
+
+.dest-drawer-overlay.open .dest-drawer-panel {
+  transform: translateX(0);
+}
+
+
+.dest-drawer-header {
+padding: 2rem 2.5rem 1.5rem 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.dest-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--c-sand-subtle);
+  border: 1px solid var(--c-border-light);
+  color: var(--c-forest-deep);
+  cursor: pointer;
+  transition: var(--trans-fast);
+  font-size: 1.1rem;
+}
+
+.dest-drawer-close:hover {
+  background: var(--c-sand);
+  transform: rotate(90deg);
+}
+
+.dest-drawer-body {
+padding: 2.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.dest-drawer-menu {
+list-style: none;
+  padding: 0;
+  margin: 0 0 2rem 0;
+}
+
+.dest-drawer-item {
+margin-bottom: 1.25rem;
+}
+
+.dest-drawer-link {
+font-size: 1.65rem;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: var(--c-forest-deep);
+  text-decoration: none;
+  display: inline-block;
+  position: relative;
+  transition: var(--trans-fast);
+}
+
+.dest-drawer-link:hover,
+.dest-drawer-link.active {
+  color: var(--c-brass);
+  font-weight: 500;
+  transform: translateX(8px);
+}
+
+.dest-drawer-card {
+background: var(--c-sand-subtle);
+  border: 1px solid var(--c-sand);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.dest-drawer-card-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--c-brass);
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.dest-drawer-card-title {
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--c-forest-deep);
+  margin-bottom: 0.5rem;
+}
+
+.dest-drawer-card-desc {
+  font-size: 0.85rem;
+  color: var(--c-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.dest-drawer-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  border-top: 1px solid rgba(34, 66, 52, 0.08);
+  padding-top: 0.85rem;
+}
+
+.dest-drawer-fact-item span {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dest-drawer-fact-item strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--c-forest-deep);
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+/* ============================================================
+   3. Hero Section (Cinematic Editorial Sri Lanka)
+   ============================================================ */
+.dest-hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--c-forest-deep);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  color: #FFFFFF;
+  padding: 8rem 2rem 6rem 2rem;
+  overflow: hidden;
+}
+
+.dest-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(22, 46, 36, 0.45) 0%,
+    rgba(22, 46, 36, 0.25) 40%,
+    rgba(22, 46, 36, 0.75) 100%
+  );
+  z-index: 1;
+}
+
+.dest-hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.dest-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 0.45rem 1.25rem;
+  border-radius: 2rem;
+  font-size: 0.725rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-brass-light);
+  margin-bottom: 1.75rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.dest-hero-title {
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 300;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  margin: 0 0 1.25rem 0;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.dest-hero-subheadline {
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+  font-weight: 300;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 720px;
+  margin: 0 auto 1.5rem auto;
+  letter-spacing: 0.02em;
+}
+
+.dest-hero-desc {
+  font-size: 0.95rem;
+  font-weight: 300;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 660px;
+  margin: 0 auto 2.5rem auto;
+}
+
+.dest-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.dest-hero-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--c-brass);
+  color: #FFFFFF;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.95rem 2.2rem;
+  border-radius: 2rem;
+  box-shadow: 0 8px 24px rgba(182, 140, 72, 0.35);
+  transition: var(--trans-fast);
+  border: 1px solid var(--c-brass-light);
+}
+
+.dest-hero-btn-primary:hover {
+  background: var(--c-brass-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(182, 140, 72, 0.45);
+}
+
+.dest-hero-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.95rem 2rem;
+  border-radius: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: var(--trans-fast);
+}
+
+.dest-hero-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: #FFFFFF;
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   4. Floating Availability Search Component
+   ============================================================ */
+.dest-search-bar-wrap {
+  position: relative;
+  z-index: 20;
+  margin-top: -3.5rem;
+  padding: 0 1.5rem;
+}
+
+.dest-search-card {
+  max-width: 1180px;
+  margin: 0 auto;
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow-editorial);
+  border: 1px solid var(--c-border-light);
+}
+
+.dest-search-form {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 0.9fr 1.1fr auto;
+  gap: 1.25rem;
+  align-items: flex-end;
+}
+
+.dest-search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dest-search-label {
+  font-size: 0.725rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--c-forest);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dest-search-input,
+.dest-search-select {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  background: var(--c-sand-subtle);
+  border: 1px solid var(--c-border-medium);
+  border-radius: 0.65rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--c-forest-deep);
+  outline: none;
+  transition: var(--trans-fast);
+}
+
+.dest-search-input:focus,
+.dest-search-select:focus {
+  border-color: var(--c-brass);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px var(--c-brass-subtle);
+}
+
+.dest-search-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1.6rem;
+  font-family: inherit;
+  font-size: 0.825rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--trans-fast);
+  white-space: nowrap;
+}
+
+.dest-search-submit:hover {
+  background: var(--c-forest-light);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(22, 46, 36, 0.25);
+}
+
+/* ============================================================
+   5. General Section Typography & Containers
+   ============================================================ */
+.dest-section {
+  padding: 6.5rem 2rem;
+  position: relative;
+}
+
+.dest-container {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.dest-section-header {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto 4rem auto;
+}
+
+.dest-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--c-brass);
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.dest-heading {
+  font-size: clamp(2rem, 3.8vw, 3rem);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: var(--c-forest-deep);
+  line-height: 1.25;
+  margin: 0 0 1rem 0;
+}
+
+.dest-lead {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--c-text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ============================================================
+   6. Section 2 — Destination Discovery (Asymmetric Storytelling)
+   ============================================================ */
+.dest-discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2rem;
+  align-items: stretch;
+}
+
+.dest-discovery-card {
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.25rem;
+  background-color: var(--c-forest-deep);
+  transition: var(--trans-smooth);
+}
+
+.dest-discovery-card.col-7 {
+  grid-column: span 7;
+}
+
+.dest-discovery-card.col-5 {
+  grid-column: span 5;
+}
+
+.dest-discovery-card.col-6 {
+  grid-column: span 6;
+}
+
+.dest-discovery-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1;
+}
+
+.dest-discovery-card:hover .dest-discovery-bg {
+  transform: scale(1.05);
+}
+
+.dest-discovery-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(22, 46, 36, 0.1) 0%,
+    rgba(22, 46, 36, 0.4) 40%,
+    rgba(22, 46, 36, 0.9) 100%
+  );
+  z-index: 2;
+  transition: var(--trans-fast);
+}
+
+.dest-discovery-card:hover .dest-discovery-scrim {
+  background: linear-gradient(
+    180deg,
+    rgba(22, 46, 36, 0.05) 0%,
+    rgba(22, 46, 36, 0.3) 30%,
+    rgba(22, 46, 36, 0.95) 100%
+  );
+}
+
+.dest-discovery-content {
+  position: relative;
+  z-index: 3;
+  color: #FFFFFF;
+}
+
+.dest-discovery-tag {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.3rem 0.8rem;
+  border-radius: 2rem;
+  font-size: 0.675rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--c-brass-light);
+  margin-bottom: 0.85rem;
+}
+
+.dest-discovery-title {
+  font-size: 1.55rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.25;
+}
+
+.dest-discovery-desc {
+  font-size: 0.875rem;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ============================================================
+   7. Section 3 — Our Property (Stay With Us)
+   ============================================================ */
+.dest-property-section {
+  background: var(--c-sand-subtle);
+  border-top: 1px solid var(--c-border-light);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.dest-property-showcase {
+  background: #FFFFFF;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-editorial);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  border: 1px solid var(--c-border-light);
+}
+
+.dest-property-media {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+}
+
+.dest-property-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.8s ease;
+}
+
+.dest-property-showcase:hover .dest-property-img {
+  transform: scale(1.03);
+}
+
+.dest-property-badge-float {
+  position: absolute;
+  top: 1.75rem;
+  left: 1.75rem;
+  background: rgba(22, 46, 36, 0.88);
+  backdrop-filter: blur(10px);
+  color: #FFFFFF;
+  padding: 0.5rem 1.1rem;
+  border-radius: 2rem;
+  font-size: 0.725rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dest-property-content {
+  padding: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dest-property-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--c-brass);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.dest-property-title {
+  font-size: 2.2rem;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--c-forest-deep);
+  margin: 0 0 1rem 0;
+  line-height: 1.2;
+}
+
+.dest-property-desc {
+  font-size: 0.95rem;
+  color: var(--c-text-secondary);
+  line-height: 1.7;
+  margin: 0 0 1.75rem 0;
+}
+
+.dest-property-amenities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 2.25rem;
+  border-top: 1px solid var(--c-border-light);
+  padding-top: 1.5rem;
+}
+
+.dest-property-amenity-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--c-forest-deep);
+}
+
+.dest-property-amenity-item svg {
+  color: var(--c-brass);
+  flex-shrink: 0;
+}
+
+.dest-property-ctas {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.dest-btn-explore-rooms {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  text-decoration: none;
+  font-size: 0.825rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.8rem;
+  border-radius: 2rem;
+  transition: var(--trans-fast);
+}
+
+.dest-btn-explore-rooms:hover {
+  background: var(--c-forest-light);
+  transform: translateY(-2px);
+}
+
+.dest-btn-property-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--c-forest-deep);
+  text-decoration: none;
+  font-size: 0.825rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.4rem;
+  border: 1px solid var(--c-border-medium);
+  border-radius: 2rem;
+  transition: var(--trans-fast);
+}
+
+.dest-btn-property-details:hover {
+  background: var(--c-sand-subtle);
+  border-color: var(--c-forest);
+}
+
+/* ============================================================
+   8. Section 4 — Experiences (Editorial Discovery)
+   ============================================================ */
+.dest-exp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+}
+
+.dest-exp-card {
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--c-border-light);
+  display: flex;
+  flex-direction: column;
+  transition: var(--trans-smooth);
+}
+
+.dest-exp-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.dest-exp-thumb {
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+}
+
+.dest-exp-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.7s ease;
+}
+
+.dest-exp-card:hover .dest-exp-img {
+  transform: scale(1.06);
+}
+
+.dest-exp-cat {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: rgba(22, 46, 36, 0.85);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+  border-radius: 2rem;
+}
+
+.dest-exp-body {
+  padding: 1.75rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.dest-exp-title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--c-forest-deep);
+  margin: 0 0 0.75rem 0;
+  line-height: 1.35;
+}
+
+.dest-exp-desc {
+  font-size: 0.875rem;
+  color: var(--c-text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.25rem 0;
+  flex: 1;
+}
+
+.dest-exp-highlight {
+  font-size: 0.775rem;
+  color: var(--c-brass-hover);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-top: 1px solid var(--c-border-light);
+  padding-top: 0.85rem;
+}
+
+/* ============================================================
+   9. Section 5 — The Sri Lankan Story (The Spirit of Sri Lanka)
+   ============================================================ */
+.dest-story-section {
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  padding: 7rem 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.dest-story-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 4.5rem;
+  align-items: center;
+}
+
+.dest-story-media-composition {
+  position: relative;
+  padding-bottom: 2.5rem;
+}
+
+.dest-story-img-main {
+  width: 88%;
+  height: 480px;
+  object-fit: cover;
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.dest-story-img-sub {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 48%;
+  height: 240px;
+  object-fit: cover;
+  border-radius: 1rem;
+  border: 4px solid var(--c-forest-deep);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.dest-story-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.dest-story-eyebrow {
+  color: var(--c-brass-light);
+  font-size: 0.75rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-bottom: 0.85rem;
+}
+
+.dest-story-title {
+  font-size: clamp(2rem, 3.2vw, 2.75rem);
+  font-weight: 300;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  margin: 0 0 1.25rem 0;
+  color: #FFFFFF;
+}
+
+.dest-story-quote {
+  font-size: 1.1rem;
+  font-style: italic;
+  font-weight: 300;
+  color: var(--c-sand);
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+.dest-story-p {
+  font-size: 0.95rem;
+  font-weight: 300;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 1.25rem;
+}
+
+.dest-story-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 2rem;
+}
+
+.dest-story-stat-val {
+  font-size: 1.65rem;
+  font-weight: 300;
+  color: var(--c-brass-light);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.dest-story-stat-lbl {
+  font-size: 0.725rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.65);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.35rem;
+}
+
+/* ============================================================
+   10. Section 6 — Rooms & Stays (Database-Driven Accommodations)
+   ============================================================ */
+.dest-rooms-filter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 3.5rem;
+}
+
+.dest-filter-btn {
+  background: transparent;
+  border: 1px solid var(--c-border-medium);
+  color: var(--c-forest-deep);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.6rem 1.35rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  transition: var(--trans-fast);
+}
+
+.dest-filter-btn:hover {
+  background: var(--c-sand-subtle);
+  border-color: var(--c-forest);
+}
+
+.dest-filter-btn.active {
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  border-color: var(--c-forest-deep);
+}
+
+.dest-rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 2.25rem;
+}
+
+.dest-room-card {
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--c-border-light);
+  display: flex;
+  flex-direction: column;
+  transition: var(--trans-smooth);
+}
+
+.dest-room-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-editorial);
+}
+
+.dest-room-media {
+  position: relative;
+  height: 250px;
+  overflow: hidden;
+}
+
+.dest-room-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.7s ease;
+}
+
+.dest-room-card:hover .dest-room-img {
+  transform: scale(1.05);
+}
+
+.dest-room-tag {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: rgba(22, 46, 36, 0.88);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+  border-radius: 2rem;
+}
+
+.dest-room-avail-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(34, 197, 94, 0.9);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  font-size: 0.675rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.75rem;
+  border-radius: 2rem;
+}
+
+.dest-room-body {
+  padding: 2rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.dest-room-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  gap: 1rem;
+}
+
+.dest-room-name {
+  font-size: 1.35rem;
+  font-weight: 400;
+  color: var(--c-forest-deep);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.dest-room-price {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dest-room-price-val {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--c-forest-deep);
+}
+
+.dest-room-price-sub {
+  font-size: 0.725rem;
+  color: var(--c-text-muted);
+}
+
+.dest-room-desc {
+  font-size: 0.875rem;
+  color: var(--c-text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.25rem 0;
+  flex: 1;
+}
+
+.dest-room-specs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.9rem 0.85rem;
+  background: #F8F4EC;
+  border-radius: 0.9rem;
+  border: 1px solid var(--c-border-light);
+  margin-bottom: 1rem;
+}
+
+.dest-room-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--c-text-secondary);
+}
+
+.dest-room-spec-label {
+  font-size: 0.66rem;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.dest-room-feature-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.dest-room-feature-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  padding: 0.42rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(65, 99, 76, 0.08);
+  color: var(--c-forest-deep);
+}
+
+.dest-room-feature-item svg {
+  color: var(--c-brass);
+  font-size: 0.65rem;
+}
+
+.dest-room-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.dest-room-btn-details {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background: var(--c-sand-subtle);
+  color: var(--c-forest-deep);
+  border: 1px solid var(--c-border-medium);
+  border-radius: 2rem;
+  font-family: inherit;
+  font-size: 0.775rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--trans-fast);
+}
+
+.dest-room-btn-details:hover {
+  background: var(--c-sand);
+  border-color: var(--c-forest);
+}
+
+.dest-room-btn-reserve {
+  flex: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.25rem;
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 2rem;
+  font-family: inherit;
+  font-size: 0.775rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--trans-fast);
+}
+
+.dest-room-btn-reserve:hover {
+  background: var(--c-brass);
+  box-shadow: 0 4px 14px rgba(182, 140, 72, 0.3);
+}
+
+@media (max-width: 960px) {
+  .dest-rooms-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .dest-rooms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-room-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dest-room-price {
+    text-align: left;
+  }
+
+  .dest-room-actions {
+    flex-direction: column;
+  }
+}
+
+/* ============================================================
+   11. Section 8 — Destination Escape Experience Selector
+   ============================================================ */
+.dest-escape-section {
+  background: var(--c-sand-subtle);
+  border-top: 1px solid var(--c-border-light);
+}
+
+.dest-escape-options {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 2.5rem;
+}
+
+.dest-escape-card {
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  padding: 1.75rem 2.25rem;
+  border: 2px solid transparent;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  cursor: pointer;
+  transition: var(--trans-fast);
+  text-align: left;
+}
+
+.dest-escape-card.active {
+  border-color: var(--c-brass);
+  background: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(182, 140, 72, 0.15);
+}
+
+.dest-escape-card.upcoming {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: var(--c-ivory);
+}
+
+.dest-escape-flag {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.dest-escape-name {
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--c-forest-deep);
+  margin: 0;
+}
+
+.dest-escape-status {
+  font-size: 0.725rem;
+  color: var(--c-brass);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 0.2rem;
+}
+
+/* ============================================================
+   12. Subtle Hospitality Concierge Assistant Widget
+   ============================================================ */
+.dest-concierge-toggle {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  padding: 0.85rem 1.4rem;
+  border-radius: 2rem;
+  box-shadow: var(--shadow-editorial);
+  border: 1px solid var(--c-brass);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  transition: var(--trans-fast);
+}
+
+.dest-concierge-toggle:hover {
+  background: var(--c-forest-light);
+  transform: translateY(-2px);
+}
+
+.dest-concierge-drawer {
+  position: fixed;
+  bottom: 5.5rem;
+  right: 2rem;
+  width: 360px;
+  max-width: calc(100vw - 4rem);
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-editorial);
+  border: 1px solid var(--c-border-light);
+  z-index: 950;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: var(--trans-smooth);
+}
+
+.dest-concierge-header {
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dest-concierge-body {
+  padding: 1.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dest-concierge-faq-btn {
+  width: 100%;
+  text-align: left;
+  background: var(--c-sand-subtle);
+  border: 1px solid var(--c-border-light);
+  border-radius: 0.65rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.825rem;
+  color: var(--c-forest-deep);
+  margin-bottom: 0.6rem;
+  cursor: pointer;
+  transition: var(--trans-fast);
+}
+
+.dest-concierge-faq-btn:hover {
+  background: var(--c-sand);
+  border-color: var(--c-brass);
+}
+
+/* ============================================================
+   13. Luxury Hotel Chain Footer
+   ============================================================ */
+.dest-footer {
+  background: var(--c-forest-deep);
+  color: #FFFFFF;
+  padding: 5.5rem 2rem 2.5rem 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dest-footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr;
+  gap: 3.5rem;
+  max-width: 1320px;
+  margin: 0 auto 4rem auto;
+}
+
+.dest-footer-brand-title {
+  font-size: 1.35rem;
+  font-weight: 300;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 0 0 0.4rem 0;
+}
+
+.dest-footer-brand-sub {
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--c-brass-light);
+  margin-bottom: 1.25rem;
+}
+
+.dest-footer-brand-desc {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.7;
+  max-width: 380px;
+}
+
+.dest-footer-col h5 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-brass-light);
+  margin: 0 0 1.25rem 0;
+}
+
+.dest-footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dest-footer-col li {
+  margin-bottom: 0.75rem;
+}
+
+.dest-footer-col a {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: var(--trans-fast);
+}
+
+.dest-footer-col a:hover {
+  color: #FFFFFF;
+  padding-left: 4px;
+}
+
+.dest-footer-bottom {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.775rem;
+  color: rgba(255, 255, 255, 0.5);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* ============================================================
+   14. Responsive Layout Adaptations
+   ============================================================ */
+@media (max-width: 1100px) {
+  .dest-search-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .dest-discovery-card.col-7,
+  .dest-discovery-card.col-5,
+  .dest-discovery-card.col-6 {
+    grid-column: span 12;
+  }
+
+  .dest-property-showcase {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-property-media {
+    min-height: 350px;
+  }
+
+  .dest-story-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .dest-exp-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dest-footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .dest-nav {
+    padding: 1rem 1.25rem;
+  }
+
+  .dest-search-form {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-search-bar-wrap {
+    margin-top: -2rem;
+  }
+
+  .dest-exp-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-rooms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-story-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dest-property-content {
+    padding: 2rem 1.5rem;
+  }
+
+  .dest-property-amenities {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dest-hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dest-hero-btn-primary,
+  .dest-hero-btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* Room catalogue expansion and per-room photo gallery */
+.dest-rooms-more-wrap { display: flex; justify-content: center; margin-top: 2rem; }
+.dest-rooms-more-btn { border: 1px solid var(--c-brass); border-radius: 999px; background: transparent; color: var(--c-forest-deep); padding: 0.85rem 2rem; font: inherit; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; transition: background 180ms ease, color 180ms ease; }
+.dest-rooms-more-btn:hover { background: var(--c-forest-deep); color: #fff; }
+.room-gallery-main { position: relative; height: 300px; margin-bottom: 0.75rem; overflow: hidden; border-radius: 0.75rem; background: #eee9df; }
+.room-gallery-main > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.room-gallery-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 2.5rem; height: 2.5rem; border: 0; border-radius: 50%; background: rgba(20, 35, 29, 0.78); color: #fff; font-size: 1.8rem; line-height: 1; cursor: pointer; }
+.room-gallery-arrow.previous { left: 0.75rem; }
+.room-gallery-arrow.next { right: 0.75rem; }
+.room-gallery-thumbnails { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 1.25rem; }
+.room-gallery-thumb { padding: 0; height: 72px; border: 2px solid transparent; border-radius: 0.5rem; overflow: hidden; background: transparent; cursor: pointer; opacity: 0.78; }
+.room-gallery-thumb.active { border-color: var(--c-brass); opacity: 1; }
+.room-gallery-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 520px) { .room-gallery-main { height: 220px; } .room-gallery-thumb { height: 56px; } }
+
+
+/* Discover Our Dining: section-scoped card layout */
+.dest-dining-section .dest-dining-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; align-items: stretch; margin: 0 0 3.5rem; }
+.dest-dining-section .dest-dining-card { min-width: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--c-border-light); border-radius: 1rem; background: #fff; box-shadow: var(--shadow-soft); color: var(--c-text-primary); text-decoration: none; transition: var(--trans-smooth); }
+.dest-dining-section .dest-dining-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-elevated); }
+.dest-dining-section .dest-dining-card:focus-visible, .dest-dining-section .dest-dining-all-link:focus-visible { outline: 3px solid var(--c-brass); outline-offset: 4px; }
+.dest-dining-section .dest-dining-media { position: relative; height: 205px; flex: 0 0 205px; overflow: hidden; background: var(--c-sand-subtle); }
+.dest-dining-section .dest-dining-img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.dest-dining-section .dest-dining-card:hover .dest-dining-img { transform: scale(1.045); }
+.dest-dining-section .dest-dining-badge { position: absolute; left: 1rem; bottom: 1rem; max-width: calc(100% - 2rem); padding: 0.4rem 0.7rem; border: 1px solid rgba(255,255,255,0.34); border-radius: 999px; background: rgba(22,46,36,0.82); color: var(--c-brass-light); font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; line-height: 1.35; text-transform: uppercase; backdrop-filter: blur(6px); }
+.dest-dining-section .dest-dining-body { display: flex; flex: 1; flex-direction: column; align-items: flex-start; padding: 1.35rem; }
+.dest-dining-section .dest-dining-type { display: inline-flex; align-items: center; gap: 0.45rem; margin-bottom: 0.65rem; color: var(--c-brass); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1.45; text-transform: uppercase; }
+.dest-dining-section .dest-dining-title { margin: 0 0 0.5rem; color: var(--c-forest-deep); font-size: 1.2rem; font-weight: 500; line-height: 1.3; }
+.dest-dining-section .dest-dining-description { margin: 0 0 0.9rem; color: var(--c-text-secondary); font-size: 0.84rem; line-height: 1.6; }
+.dest-dining-section .dest-dining-hours { display: flex; align-items: flex-start; gap: 0.45rem; margin: auto 0 0.85rem; color: var(--c-text-muted); font-size: 0.72rem; line-height: 1.5; }
+.dest-dining-section .dest-dining-hours svg { flex: 0 0 auto; margin-top: 0.18rem; color: var(--c-brass); }
+.dest-dining-section .dest-dining-card-link { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: auto; color: var(--c-brass); font-size: 0.8rem; font-weight: 600; }
+.dest-dining-section .dest-dining-card:hover .dest-dining-card-link { color: var(--c-brass-hover); }
+.dest-dining-section .dest-dining-actions { display: flex; align-items: center; justify-content: center; gap: 1.25rem; flex-wrap: wrap; }
+.dest-dining-section .dest-dining-all-link { padding: 0.9rem 2rem; text-decoration: none; text-align: center; }
+@media (max-width: 1100px) { .dest-dining-section .dest-dining-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .dest-dining-section .dest-dining-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; } .dest-dining-section .dest-dining-media { height: 220px; flex-basis: 220px; } .dest-dining-section .dest-dining-body { padding: 1.2rem; } .dest-dining-section .dest-dining-actions { align-items: stretch; flex-direction: column; gap: 0.8rem; } .dest-dining-section .dest-dining-all-link, .dest-dining-section .dest-dining-actions .dest-btn-property-details { width: 100%; justify-content: center; } }
+
+
+/* Preserve the Discover Sri Lanka artwork and layout; improve topic-title contrast only. */
+#discovery .dest-discovery-title { color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
+
+.dest-drawer-panel .dest-drawer-menu .dest-drawer-link.dest-dining-drawer-link { font-weight: 400; }
+
+/* Make the rendered global navigation labels explicit at their source. */
+.dest-nav .dest-menu-btn .dest-menu-label { font-size: 0.68rem; }

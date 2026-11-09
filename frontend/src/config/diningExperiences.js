@@ -1,0 +1,102 @@
+// Frontend-only promotional concepts for the existing Dining offers section.
+// These cards are informational and are not connected to reservation APIs.
+export const DINING_PROMOTIONAL_EXPERIENCES = [
+  {
+    id: 'promo-sunset-ocean-dining',
+    category: 'sunset',
+    frontendOnly: true,
+    title: 'Sunset Ocean Dining',
+    shortDescription: 'Enjoy an intimate coastal dinner as the evening light settles over the ocean.',
+    description: 'A relaxed sunset dining concept pairing an ocean-inspired dinner with a romantic waterfront atmosphere. Designed as an unhurried way to celebrate a special evening together.',
+    image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=1400&q=85',
+    venue: 'Ocean-view dining setting',
+    location: 'Oceanfront',
+    experienceType: 'Coastal dinner',
+    time: 'At sunset',
+    duration: 'Dinner experience',
+    suitableFor: 'Couples and special occasions',
+    highlights: ['Ocean-inspired dinner setting', 'Sunset atmosphere', 'A relaxed evening experience']
+  },
+  {
+    id: 'promo-romantic-dinner',
+    category: 'romantic',
+    frontendOnly: true,
+    title: 'Romantic Dinner for Two',
+    shortDescription: 'A private, candlelit dinner concept for anniversaries and meaningful celebrations.',
+    description: 'An elegant dinner setting with thoughtful details and a quiet, intimate atmosphere. This presentation experience is designed for couples celebrating a special occasion.',
+    image: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1400&q=85',
+    venue: 'Private dining setting',
+    location: 'Secluded dining area',
+    experienceType: 'Private dining',
+    time: 'Evening',
+    duration: 'Dinner experience',
+    suitableFor: 'Couples and celebrations',
+    highlights: ['Private table setting', 'Candlelit atmosphere', 'Special-occasion dining']
+  },
+  {
+    id: 'promo-signature-afternoon-tea',
+    category: 'tea',
+    frontendOnly: true,
+    title: 'Signature Afternoon Tea',
+    shortDescription: 'Take a leisurely afternoon over tea, delicate desserts and savoury selections.',
+    description: 'A refined afternoon tea concept featuring a selection of teas, petite desserts and savoury bites in an elegant hotel setting.',
+    image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1400&q=85',
+    venue: 'Elegant hotel lounge',
+    location: 'Lounge setting',
+    experienceType: 'Afternoon tea',
+    time: 'Afternoon',
+    duration: 'Tea service',
+    suitableFor: 'Friends, couples and small groups',
+    highlights: ['Selected teas', 'Petite desserts', 'Savoury bites']
+  },
+  {
+    id: 'promo-chef-signature-experience',
+    category: 'chef',
+    frontendOnly: true,
+    title: 'Chef’s Signature Experience',
+    shortDescription: 'Explore a chef-led dining concept shaped around premium ingredients and creative dishes.',
+    description: 'A curated dining concept that highlights the chef’s style through a thoughtful progression of premium dishes and seasonal inspiration.',
+    image: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1400&q=85',
+    venue: 'Chef-led dining setting',
+    location: 'Restaurant dining room',
+    experienceType: 'Curated chef experience',
+    time: 'Dinner service',
+    duration: 'Multi-course dining',
+    suitableFor: 'Food lovers and special occasions',
+    highlights: ['Chef-selected dishes', 'Premium ingredients', 'A curated dining progression']
+  },
+  {
+    id: 'promo-private-beach-dining',
+    category: 'beach',
+    frontendOnly: true,
+    title: 'Private Beach Dining',
+    shortDescription: 'Discover a secluded seaside dinner concept with a relaxed, intimate atmosphere.',
+    description: 'A private beachside dining concept for guests looking for an intimate meal beside the sea, with an elegant dinner setting and coastal surroundings.',
+    image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1400&q=85',
+    venue: 'Beachside dining setting',
+    location: 'Seaside',
+    experienceType: 'Private coastal dining',
+    time: 'Sunset or evening',
+    duration: 'Dinner experience',
+    suitableFor: 'Couples and private celebrations',
+    highlights: ['Secluded seaside setting', 'Private table concept', 'Coastal dinner atmosphere']
+  },
+  {
+    id: 'promo-family-dining-experience',
+    category: 'family',
+    frontendOnly: true,
+    title: 'Family Dining Experience',
+    shortDescription: 'Share a relaxed hotel dining experience designed with families and groups in mind.',
+    description: 'A welcoming family dining concept with a comfortable setting for sharing a meal together and enjoying a varied selection of dishes.',
+    image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1400&q=85',
+    venue: 'All-day dining setting',
+    location: 'Hotel restaurant',
+    experienceType: 'Family dining',
+    time: 'Meal-time experience',
+    duration: 'Flexible dining',
+    suitableFor: 'Families and groups',
+    highlights: ['Comfortable group setting', 'Varied dining selection', 'Family-friendly atmosphere']
+  }
+];
+
+export default DINING_PROMOTIONAL_EXPERIENCES;

@@ -1,0 +1,337 @@
+/* frontend/src/components/PaymentModal.css */
+:root {
+  --serendib-ivory: #FDFCF7;
+  --serendib-sand: #EDE7D9;
+  --serendib-forest-deep: #162E24;
+  --serendib-forest: #345B4A;
+  --serendib-brass: #B68C48;
+  --serendib-brass-hover: #9E773A;
+  --serendib-border-sand: #DFD5C3;
+  --serendib-border-light: #F3EFE6;
+  --serendib-text-primary: #1C2421;
+  --serendib-text-muted: #5E6963;
+}
+
+.serendib-pay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 46, 36, 0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1.25rem;
+  animation: serendibFadeIn 0.25s ease-out;
+}
+
+.serendib-pay-modal {
+  background: var(--serendib-ivory);
+  border: 1px solid var(--serendib-border-sand);
+  border-radius: 1rem;
+  max-width: 580px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 48px -12px rgba(22, 46, 36, 0.35);
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--serendib-text-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.serendib-pay-header {
+  padding: 1.5rem 1.75rem;
+  border-bottom: 1px solid var(--serendib-border-sand);
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+}
+
+.serendib-pay-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.serendib-pay-badge-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(182, 140, 72, 0.12);
+  color: var(--serendib-brass);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.serendib-pay-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--serendib-forest-deep);
+  letter-spacing: -0.01em;
+}
+
+.serendib-pay-subtitle {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--serendib-text-muted);
+}
+
+.serendib-pay-close-btn {
+  background: none;
+  border: none;
+  color: var(--serendib-text-muted);
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.serendib-pay-close-btn:hover {
+  background: var(--serendib-sand);
+  color: var(--serendib-forest-deep);
+}
+
+.serendib-pay-body {
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.serendib-order-card {
+  background: #FFFFFF;
+  border: 1px solid var(--serendib-border-sand);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.serendib-order-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--serendib-brass);
+  margin-bottom: 0.5rem;
+}
+
+.serendib-order-item-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--serendib-forest-deep);
+  margin-bottom: 0.35rem;
+}
+
+.serendib-order-item-desc {
+  font-size: 0.85rem;
+  color: var(--serendib-text-muted);
+  line-height: 1.5;
+}
+
+.serendib-price-breakdown {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--serendib-border-sand);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.serendib-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--serendib-text-muted);
+}
+
+.serendib-price-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--serendib-border-sand);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--serendib-forest-deep);
+}
+
+.serendib-gateway-box {
+  background: #FFFFFF;
+  border: 1px solid var(--serendib-border-sand);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.serendib-gateway-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.serendib-payhere-pill {
+  background: #002244;
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.35rem;
+  letter-spacing: 0.05em;
+}
+
+.serendib-gateway-methods {
+  font-size: 0.775rem;
+  color: var(--serendib-text-muted);
+}
+
+.serendib-pay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.serendib-btn-pay {
+  background: var(--serendib-forest);
+  color: #FFFFFF;
+  border: 1px solid var(--serendib-forest-deep);
+  border-radius: 0.6rem;
+  padding: 0.95rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 12px rgba(22, 46, 36, 0.15);
+}
+
+.serendib-btn-pay:hover:not(:disabled) {
+  background: var(--serendib-forest-deep);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 46, 36, 0.25);
+}
+
+.serendib-btn-pay:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.serendib-btn-sandbox-sim {
+  background: rgba(182, 140, 72, 0.12);
+  color: var(--serendib-brass);
+  border: 1px solid var(--serendib-brass);
+  border-radius: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.serendib-btn-sandbox-sim:hover:not(:disabled) {
+  background: var(--serendib-brass);
+  color: #FFFFFF;
+}
+
+.serendib-pay-security-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--serendib-text-muted);
+  text-align: center;
+}
+
+@keyframes serendibFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Printable Luxury Receipt Styles */
+.serendib-receipt-container {
+  background: #FFFFFF;
+  border: 1px solid var(--serendib-border-sand);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  color: var(--serendib-forest-deep);
+}
+
+.serendib-receipt-header {
+  text-align: center;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid var(--serendib-brass);
+  margin-bottom: 1.5rem;
+}
+
+.serendib-receipt-brand {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--serendib-forest-deep);
+}
+
+.serendib-receipt-property {
+  font-size: 0.85rem;
+  color: var(--serendib-text-muted);
+  margin-top: 0.25rem;
+}
+
+.serendib-receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+.serendib-receipt-table th {
+  text-align: left;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--serendib-border-sand);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--serendib-text-muted);
+}
+
+.serendib-receipt-table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--serendib-border-light);
+  font-size: 0.9rem;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .serendib-receipt-container, .serendib-receipt-container * {
+    visibility: visible;
+  }
+  .serendib-receipt-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,540 @@
+/* frontend/src/components/CustomerNavbar.css */
+/* ============================================================
+   Disciplined Luxury Customer Navigation
+   Three-part layout: Left (Brand), Center (Nav), Right (Actions)
+   ============================================================ */
+
+.dest-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 1.25rem 2.5rem;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: transparent;
+}
+
+.dest-nav.scrolled {
+  background: rgba(253, 252, 247, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(22, 46, 36, 0.05);
+  border-bottom: 1px solid var(--c-border-light, #EDE7D9);
+  padding: 0.85rem 2.5rem;
+}
+
+.dest-nav-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+/* ============================================================
+   1. Left: Brand
+   ============================================================ */
+.dest-nav-left {
+  flex-shrink: 0;
+}
+
+.dest-brand-link {
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.2s ease;
+}
+
+.dest-brand-link:hover {
+  opacity: 0.92;
+}
+
+.dest-brand-title {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.2;
+  transition: color 0.3s ease;
+}
+
+.dest-brand-sub {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.6rem;
+  font-weight: 300;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--c-brass-light, #D4AF6E);
+  margin-top: 0.2rem;
+  transition: color 0.3s ease;
+}
+
+.dest-nav.scrolled .dest-brand-title {
+  color: var(--c-forest-deep, #162E24);
+}
+
+.dest-nav.scrolled .dest-brand-sub {
+  color: var(--c-brass, #B68C48);
+}
+
+/* ============================================================
+   2. Center: Focused Main Navigation
+   ============================================================ */
+.dest-nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.dest-nav-link {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.825rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+  text-decoration: none;
+  padding: 0.4rem 0.1rem;
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.dest-nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--c-brass, #B68C48);
+  transition: width 0.25s ease;
+}
+
+.dest-nav-link:hover {
+  color: #FFFFFF;
+}
+
+.dest-nav-link:hover::after,
+.dest-nav-link.active::after {
+  width: 100%;
+}
+
+.dest-nav-link.active {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.dest-nav.scrolled .dest-nav-link {
+  color: var(--c-forest-deep, #162E24);
+}
+
+.dest-nav.scrolled .dest-nav-link:hover {
+  color: var(--c-brass, #B68C48);
+}
+
+.dest-nav.scrolled .dest-nav-link.active {
+  color: var(--c-brass, #B68C48);
+  font-weight: 600;
+}
+
+/* ============================================================
+   3. Right: Customer Actions & Primary CTA
+   ============================================================ */
+.dest-nav-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.15rem;
+  flex-shrink: 0;
+}
+
+/* Unauthenticated Links */
+.dest-auth-guest-links {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dest-auth-link {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  text-decoration: none;
+  padding: 0.5rem 0.85rem;
+  border-radius: 2rem;
+  transition: all 0.2s ease;
+}
+
+.dest-nav.scrolled .dest-auth-link {
+  color: var(--c-forest-deep, #162E24);
+}
+
+.dest-auth-link:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dest-nav.scrolled .dest-auth-link:hover {
+  background: var(--c-sand-subtle, #F3EFE6);
+}
+
+.dest-auth-signup {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.dest-nav.scrolled .dest-auth-signup {
+  border-color: var(--c-border-medium, #DFD5C3);
+}
+
+/* Authenticated User Menu Dropdown */
+.dest-user-menu-wrapper {
+  position: relative;
+}
+
+.dest-user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(22, 46, 36, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(182, 140, 72, 0.35);
+  color: #FFFFFF;
+  padding: 0.35rem 0.85rem 0.35rem 0.4rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+}
+
+.dest-user-menu-trigger:hover,
+.dest-user-menu-trigger.open {
+  background: rgba(22, 46, 36, 0.7);
+  border-color: var(--c-brass, #B68C48);
+}
+
+.dest-nav.scrolled .dest-user-menu-trigger {
+  background: #FFFFFF;
+  border-color: var(--c-border-medium, #DFD5C3);
+  color: var(--c-forest-deep, #162E24);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.dest-nav.scrolled .dest-user-menu-trigger:hover,
+.dest-nav.scrolled .dest-user-menu-trigger.open {
+  border-color: var(--c-brass, #B68C48);
+  background: var(--c-sand-subtle, #F3EFE6);
+}
+
+.dest-user-avatar-initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--c-brass, #B68C48);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.dest-user-name-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dest-chevron-icon {
+  color: var(--c-brass-light, #D4AF6E);
+  transition: transform 0.25s ease;
+}
+
+.dest-nav.scrolled .dest-chevron-icon {
+  color: var(--c-brass, #B68C48);
+}
+
+.dest-chevron-icon.rotated {
+  transform: rotate(180deg);
+}
+
+/* User Dropdown Panel */
+.dest-user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: 270px;
+  background: #FFFFFF;
+  border: 1px solid var(--c-border-light, #EDE7D9);
+  border-radius: 1rem;
+  box-shadow: 0 16px 36px -4px rgba(22, 46, 36, 0.12);
+  padding: 0.75rem;
+  z-index: 1050;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dest-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.5rem;
+}
+
+.dest-dropdown-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--c-forest-deep, #162E24);
+  color: var(--c-brass-light, #D4AF6E);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--c-brass, #B68C48);
+  flex-shrink: 0;
+}
+
+.dest-dropdown-user-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dest-dropdown-user-name {
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--c-forest-deep, #162E24);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dest-dropdown-user-email {
+  font-size: 0.725rem;
+  color: #718096;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dest-dropdown-badge {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-forest, #345B4A);
+  background: rgba(52, 91, 74, 0.1);
+  padding: 0.15rem 0.45rem;
+  border-radius: 1rem;
+}
+
+.dest-dropdown-divider {
+  height: 1px;
+  background: var(--c-border-light, #EDE7D9);
+  margin: 0.5rem 0;
+}
+
+.dest-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  color: var(--c-forest-deep, #162E24);
+  text-decoration: none;
+  font-size: 0.825rem;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.dest-dropdown-item:hover {
+  background: var(--c-sand-subtle, #F3EFE6);
+  color: var(--c-brass-hover, #9E773A);
+}
+
+.dest-dropdown-item-icon {
+  font-size: 0.9rem;
+  color: var(--c-brass, #B68C48);
+  flex-shrink: 0;
+}
+
+.dest-dropdown-item-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.dest-dropdown-item-text span {
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.dest-dropdown-item-text small {
+  font-size: 0.7rem;
+  color: #A0AEC0;
+  margin-top: 0.15rem;
+}
+
+.dest-dropdown-signout {
+  color: #C53030;
+}
+
+.dest-dropdown-signout .dest-dropdown-item-icon {
+  color: #C53030;
+}
+
+.dest-dropdown-signout:hover {
+  background: rgba(197, 48, 48, 0.08);
+  color: #9B2C2C;
+}
+
+/* Primary "Book Your Stay" Button */
+.dest-book-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--c-brass, #B68C48);
+  color: #FFFFFF;
+  text-decoration: none;
+  font-family: var(--font-family-primary, 'Poppins', sans-serif);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.65rem 1.35rem;
+  border-radius: 2rem;
+  box-shadow: 0 4px 14px rgba(182, 140, 72, 0.28);
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.dest-book-btn:hover {
+  background: var(--c-brass-hover, #9E773A);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(182, 140, 72, 0.38);
+}
+
+/* Mobile Hamburger Button */
+.dest-mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #FFFFFF;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dest-nav.scrolled .dest-mobile-menu-btn {
+  border-color: var(--c-border-medium, #DFD5C3);
+  color: var(--c-forest-deep, #162E24);
+}
+
+.dest-mobile-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dest-nav.scrolled .dest-mobile-menu-btn:hover {
+  background: var(--c-sand-subtle, #F3EFE6);
+}
+
+/* ============================================================
+   Responsive Breakpoints
+   ============================================================ */
+@media (max-width: 1024px) {
+  .dest-nav-center {
+    display: none; /* Collapsed into mobile drawer on tablet/mobile */
+  }
+
+  .dest-mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .dest-nav {
+    padding: 1rem 1.75rem;
+  }
+
+  .dest-nav.scrolled {
+    padding: 0.75rem 1.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .dest-nav {
+    padding: 0.85rem 1.25rem;
+  }
+
+  .dest-nav.scrolled {
+    padding: 0.7rem 1.25rem;
+  }
+
+  .dest-brand-title {
+    font-size: 0.95rem;
+    letter-spacing: 0.2em;
+  }
+
+  .dest-brand-sub {
+    font-size: 0.52rem;
+    letter-spacing: 0.25em;
+  }
+
+  .dest-user-name-label {
+    display: none; /* Show only avatar initial on very small screens */
+  }
+
+  .dest-user-menu-trigger {
+    padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  }
+
+  .dest-book-btn {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.75rem;
+  }
+
+  .dest-book-btn span {
+    display: none; /* Compact icon button on mobile if tight */
+  }
+
+  .dest-book-btn::after {
+    content: 'Book';
+    display: inline;
+  }
+}

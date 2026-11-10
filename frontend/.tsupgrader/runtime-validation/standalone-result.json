@@ -1,0 +1,104 @@
+{
+  "planHash": "ec45cfaf0826bac9e1d86bb62d4a2ce93a358261fc53b5d4c4415e7e0affc353",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-10T08:31:29.7531713Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E rms-frontend@1.0.0 build\r\n\u003E react-scripts build\r\n\r\nCreating an optimized production build...\r\nBrowserslist: browsers data (caniuse-lite) is 18 months old. Please run:\r\n  npx update-browserslist-db@latest\r\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\r\nBrowserslist: browsers data (caniuse-lite) is 18 months old. Please run:\r\n  npx update-browserslist-db@latest\r\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\r\nCompiled successfully.\r\n\r\nFile sizes after gzip:\r\n\r\n  375.83 kB  build\\static\\js\\main.17c3e865.js\r\n  49.86 kB   build\\static\\css\\main.31b5a3e5.css\r\n\r\nThe project was built assuming it is hosted at /.\r\nYou can control this with the homepage field in your package.json.\r\n\r\nThe build folder is ready to be deployed.\r\nYou may serve it with a static server:\r\n\r\n  npm install -g serve\r\n  serve -s build\r\n\r\nFind out more about deployment here:\r\n\r\n  https://cra.link/deployment\r\n\r\n",
+        "durationMs": 110782
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 1,
+        "outputSample": "\r\n\u003E rms-frontend@1.0.0 test\r\n\u003E jest\r\n\r\nFAIL src/config/roleAccess.test.js\r\n  role navigation policy\r\n    \u221A maps every stored role to its intended landing route (10 ms)\r\n    \u221A normalizes stored role values and rejects unknown roles (2 ms)\r\n    \u00D7 route access matches the existing backend read permissions (7 ms)\r\n    \u221A keeps the supported staff landing roles and route map aligned (2 ms)\r\n    \u221A restricts department administrator grants and preserves legacy admin access (2 ms)\r\n    \u221A builds department-only navigation from the same grants used for route guards (11 ms)\r\n    \u221A adds the three department dashboards only when their department grant is present (1 ms)\r\n\r\n  \u25CF role navigation policy \u203A route access matches the existing backend read permissions\r\n\r\n    expect(received).toBe(expected) // Object.is equality\r\n\r\n    Expected: false\r\n    Received: true\r\n\r\n    \u001B[0m \u001B[90m 22 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027manager\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027reservations\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mfalse\u001B[39m)\u001B[33m;\u001B[39m\r\n     \u001B[90m 23 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027finance\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027restaurants\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mtrue\u001B[39m)\u001B[33m;\u001B[39m\r\n    \u001B[31m\u001B[1m\u003E\u001B[22m\u001B[39m\u001B[90m 24 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027finance\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027reports\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mfalse\u001B[39m)\u001B[33m;\u001B[39m\r\n     \u001B[90m    |\u001B[39m                                                  \u001B[31m\u001B[1m^\u001B[22m\u001B[39m\r\n     \u001B[90m 25 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027housekeeping\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027rooms\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mtrue\u001B[39m)\u001B[33m;\u001B[39m\r\n     \u001B[90m 26 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027maintenance\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027roomForm\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mfalse\u001B[39m)\u001B[33m;\u001B[39m\r\n     \u001B[90m 27 |\u001B[39m     expect(canAccessRoute(\u001B[32m\u0027customer\u0027\u001B[39m\u001B[33m,\u001B[39m \u001B[32m\u0027reservations\u0027\u001B[39m))\u001B[33m.\u001B[39mtoBe(\u001B[36mfalse\u001B[39m)\u001B[33m;\u001B[39m\u001B[0m\r\n\r\n      at Object.toBe (src/config/roleAccess.test.js:24:50)\r\n\r\nTest Suites: 1 failed, 1 total\r\nTests:       1 failed, 6 passed, 7 total\r\nSnapshots:   0 total\r\nTime:        1.337 s, estimated 3 s\r\nRan all test suites.\r\n",
+        "durationMs": 5584,
+        "testResults": {
+          "testFramework": "jest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 7,
+          "testsPassed": 6,
+          "testsFailed": 1,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "dev-server-root-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!DOCTYPE html\u003E\r\n\u003Chtml lang=\u0022en\u0022\u003E\r\n\u003Chead\u003E\r\n  \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n  \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022/\u003E\r\n  \u003Cmeta name=\u0022description\u0022 content=\u0022HotelPMS \u2014 Professional Hotel Property Management System\u0022 /\u003E\r\n  \r\n  \u003Ctitle\u003EHotelPMS\u003C/title\u003E\r\n\r\n  \u003C!-- Google Fonts: Poppins --\u003E\r\n  \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.googleapis.com\u0022\u003E\r\n  \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.gstatic.com\u0022 crossorigin\u003E\r\n  \u003Clink href=\u0022https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600\u0026display=swap\u0022 rel=\u0022stylesheet\u0022\u003E\r\n\r\n  \u003Clink rel=\u0022manifest\u0022 href=\u0022/site.webmanifest\u0022 /\u003E\r\n\u003Cscript defer src=\u0022/static/js/bundle.js\u0022\u003E\u003C/script\u003E\u003C/head\u003E\r\n\u003Cbody\u003E\r\n  \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n\u003C/body\u003E\r\n\u003C/html\u003E\n--- server output ---\n\r\n\u003E rms-frontend@1.0.0 start\r\n\u003E react-scripts start\r\n\r\nBrowserslist: browsers data (caniuse-lite) is 18 months old. Please run:\r\n  npx update-browserslist-db@latest\r\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\r\n(node:20716) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: \u0027onAfterSetupMiddleware\u0027 option is deprecated. Please use the \u0027setupMiddlewares\u0027 option.\r\n(Use \u0060node --trace-deprecation ...\u0060 to show where the warning was created)\r\n(node:20716) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: \u0027onBeforeSetupMiddleware\u0027 option is deprecated. Please use the \u0027setupMiddlewares\u0027 option.\r\nStarting the development server...\r\n\r\nCompiled successfully!\r\n\r\nYou can now view rms-frontend in the browser.\r\n\r\n  Local:            http://localhost:3011\r\n  On Your Network:  http://192.168.56.1:3011\r\n\r\nNote that the development build is not optimized.\r\nTo create a production build, use npm run build.\r\n\r\nwebpack compiled \u001B[1m\u001B[32msuccessfully\u001B[39m\u001B[22m\r\n",
+        "durationMs": 19105
+      }
+    ],
+    "executions": [
+      {
+        "source": "production-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\ASUS\\Downloads\\Hotel_update\\Hotel_update\\frontend",
+        "env": {
+          "CI": "true"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "C:\\Users\\ASUS\\Downloads\\Hotel_update\\Hotel_update\\frontend",
+        "env": {
+          "CI": "true"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "dev-server-root-200",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "C:\\Users\\ASUS\\Downloads\\Hotel_update\\Hotel_update\\frontend",
+        "env": {
+          "BROWSER": "none",
+          "CI": "true",
+          "PORT": "3011"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

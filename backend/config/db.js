@@ -6,6 +6,7 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const seedInitialData = require("./seedData");
 
 let mongoServer = null;
+let connectionPromise = null;
 
 /**
  * Safely masks MongoDB connection string credentials for log outputs
@@ -135,69 +136,93 @@ async function connectLocalPersistentDB(targetDbName) {
 /**
  * Main database connection entrypoint
  */
-const connectDB = async () => {
+const connectDB = async ({ skipInitialization = false } = {}) => {
   // If already connected, return existing connection
   if (mongoose.connection.readyState === 1) {
     return;
   }
-
-  const rawUri = process.env.MONGO_URI ? process.env.MONGO_URI.trim() : "";
-  const targetDbName = getTargetDatabaseName(rawUri);
-
-  const rawMode = (process.env.DB_MODE || "").trim().toLowerCase();
-  const isExplicitLocal = 
-    rawMode === "local" || 
-    (process.env.USE_IN_MEMORY_DB || "").trim().toLowerCase() === "true" ||
-    (process.env.USE_LOCAL_DB || "").trim().toLowerCase() === "true";
-
-  // Mode 1: Explicit Local Persistent Database
-  if (isExplicitLocal) {
-    console.log("[DB] DB_MODE=local configured. Connecting to local persistent storage...");
-    await connectLocalPersistentDB(targetDbName);
-    return;
+  if (connectionPromise) {
+    return connectionPromise;
   }
 
-  // Mode 2: Remote MongoDB Atlas (or explicit URI)
-  if (rawUri && !rawUri.includes("localhost") && !rawUri.includes("127.0.0.1")) {
-    try {
-      console.log(`[DB] Connecting to MongoDB Atlas (${sanitizeUri(rawUri)})...`);
-      await mongoose.connect(rawUri, { serverSelectionTimeoutMS: 5000 });
-      console.log(`[DB] MongoDB Atlas connected successfully. Active Database: ${mongoose.connection.name}`);
-      await seedInitialData();
-      return;
-    } catch (err) {
-      console.error(`[DB ERROR] MongoDB Atlas connection failed: ${err.message}`);
+  connectionPromise = (async () => {
+    const rawUri = process.env.MONGO_URI ? process.env.MONGO_URI.trim() : "";
+    const targetDbName = getTargetDatabaseName(rawUri);
 
-      const allowFallback = (process.env.ALLOW_LOCAL_FALLBACK || "").trim().toLowerCase() === "true";
-      if (!allowFallback) {
-        console.error("[DB ERROR] Silent database switching is disabled to prevent data loss.");
-        console.error("[DB ERROR] To run locally with full persistence, set DB_MODE=local in backend/.env.");
-        throw err;
-      }
+    const rawMode = (process.env.DB_MODE || "").trim().toLowerCase();
+    const isExplicitLocal =
+      rawMode === "local" ||
+      (process.env.USE_IN_MEMORY_DB || "").trim().toLowerCase() === "true" ||
+      (process.env.USE_LOCAL_DB || "").trim().toLowerCase() === "true";
+    const isVercel = Boolean(process.env.VERCEL);
 
-      console.warn("[DB WARN] ALLOW_LOCAL_FALLBACK=true. Falling back to local persistent MongoDB...");
+    if (isVercel && (!rawUri || isExplicitLocal)) {
+      throw new Error("Vercel requires MONGO_URI and cannot use local or in-memory database mode");
+    }
+
+    // Mode 1: Explicit Local Persistent Database
+    if (isExplicitLocal) {
+      console.log("[DB] DB_MODE=local configured. Connecting to local persistent storage...");
       await connectLocalPersistentDB(targetDbName);
       return;
     }
-  }
 
-  // Mode 3: Local MongoDB Server instance (localhost/127.0.0.1)
-  if (rawUri && (rawUri.includes("localhost") || rawUri.includes("127.0.0.1"))) {
-    try {
-      console.log(`[DB] Connecting to local MongoDB instance (${sanitizeUri(rawUri)})...`);
-      await mongoose.connect(rawUri, { serverSelectionTimeoutMS: 4000 });
-      console.log(`[DB] Local MongoDB connected successfully. Active Database: ${mongoose.connection.name}`);
-      await seedInitialData();
-      return;
-    } catch (err) {
-      console.error(`[DB ERROR] Local MongoDB instance connection failed: ${err.message}`);
-      throw err;
+    // Mode 2: Remote MongoDB Atlas (or explicit URI)
+    if (rawUri && !rawUri.includes("localhost") && !rawUri.includes("127.0.0.1")) {
+      try {
+        console.log(`[DB] Connecting to MongoDB Atlas (${sanitizeUri(rawUri)})...`);
+        await mongoose.connect(rawUri, { serverSelectionTimeoutMS: 5000 });
+        console.log(`[DB] MongoDB Atlas connected successfully. Active Database: ${mongoose.connection.name}`);
+        if (!skipInitialization) {
+          await seedInitialData();
+        }
+        return;
+      } catch (err) {
+        console.error(`[DB ERROR] MongoDB Atlas connection failed: ${err.message}`);
+
+        const allowFallback = (process.env.ALLOW_LOCAL_FALLBACK || "").trim().toLowerCase() === "true";
+        if (isVercel || !allowFallback) {
+          console.error("[DB ERROR] Silent database switching is disabled to prevent data loss.");
+          console.error("[DB ERROR] To run locally with full persistence, set DB_MODE=local in backend/.env.");
+          throw err;
+        }
+
+        console.warn("[DB WARN] ALLOW_LOCAL_FALLBACK=true. Falling back to local persistent MongoDB...");
+        await connectLocalPersistentDB(targetDbName);
+        return;
+      }
     }
-  }
 
-  // Mode 4: Default fallback when no URI is provided
-  console.log("[DB] No remote MONGO_URI configured. Initializing local persistent MongoDB...");
-  await connectLocalPersistentDB(targetDbName);
+    // Mode 3: Local MongoDB Server instance (localhost/127.0.0.1)
+    if (rawUri && (rawUri.includes("localhost") || rawUri.includes("127.0.0.1"))) {
+      try {
+        console.log(`[DB] Connecting to local MongoDB instance (${sanitizeUri(rawUri)})...`);
+        await mongoose.connect(rawUri, { serverSelectionTimeoutMS: 4000 });
+        console.log(`[DB] Local MongoDB connected successfully. Active Database: ${mongoose.connection.name}`);
+        if (!skipInitialization) {
+          await seedInitialData();
+        }
+        return;
+      } catch (err) {
+        console.error(`[DB ERROR] Local MongoDB instance connection failed: ${err.message}`);
+        throw err;
+      }
+    }
+
+    if (isVercel) {
+      throw new Error("Vercel requires a reachable MongoDB URI in MONGO_URI");
+    }
+
+    // Mode 4: Default fallback when no URI is provided
+    console.log("[DB] No remote MONGO_URI configured. Initializing local persistent MongoDB...");
+    await connectLocalPersistentDB(targetDbName);
+  })();
+
+  try {
+    await connectionPromise;
+  } finally {
+    connectionPromise = null;
+  }
 };
 
 // Graceful cleanup
@@ -220,6 +245,7 @@ process.on("SIGINT", cleanUp);
 process.on("SIGTERM", cleanUp);
 
 connectDB.stopDB = async () => {
+  connectionPromise = null;
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();
   }

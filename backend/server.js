@@ -15,6 +15,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Vercel imports the Express app instead of executing this file as the main module.
+// Establish and reuse the remote database connection before property lookups run.
+if (process.env.VERCEL) {
+  app.use(async (req, res, next) => {
+    try {
+      await connectDB({ skipInitialization: true });
+      return next();
+    } catch (err) {
+      console.error("[DB ERROR] Vercel request connection failed:", err.message);
+      return res.status(503).json({ error: "Database service is temporarily unavailable. Please try again shortly." });
+    }
+  });
+}
+
 // Database connection readiness guard: ensure database is connected before handling requests
 app.use((req, res, next) => {
   if (req.path === "/api/health" || req.path === "/") return next();

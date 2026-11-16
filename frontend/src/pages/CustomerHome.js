@@ -155,26 +155,6 @@ const featureRoomCatalog = [
   }
 ];
 
-const fallbackRoomCatalog = featureRoomCatalog.map((room, index) => ({
-  _id: `fallback-room-${index + 1}`,
-  roomType: room.type,
-  roomNumber: `${index + 101}`,
-  basePrice: room.price,
-  price: room.price,
-  description: room.description,
-  bedConfiguration: room.bedType,
-  roomSize: room.roomSize,
-  capacity: { maxOccupancy: Number(room.guestCapacity.replace(/\D/g, '')) || 2, maxAdults: Number(room.guestCapacity.replace(/\D/g, '')) || 2 },
-  roomName: room.name,
-  images: [room.image],
-  name: room.name,
-  featureImage: room.image,
-  amenities: room.facilities,
-  view: 'Scenic Coastal View',
-  building: 'Main Pavilion',
-  floor: 1 + index
-}));
-
 const getFeatureRoomProfile = (room, fallbackIndex = 0) => {
   const roomTypeKey = (room?.roomType || room?.name || room?.roomName || '').toLowerCase();
   const bedKey = (room?.bedConfiguration || '').toLowerCase();
@@ -208,7 +188,8 @@ const CustomerHome = () => {
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('All');
 
   // Rooms State
-  const [rooms, setRooms] = useState(fallbackRoomCatalog);
+  const [rooms, setRooms] = useState([]);
+  const [roomsError, setRoomsError] = useState('');
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [hasLoadedRooms, setHasLoadedRooms] = useState(false);
 
@@ -238,12 +219,6 @@ const CustomerHome = () => {
     fetchRooms();
   }, []);
 
-  useEffect(() => {
-    if (rooms.length === 0) {
-      setRooms(fallbackRoomCatalog);
-    }
-  }, [rooms]);
-
   // Fetch the active property from the backend
   const fetchActiveProperty = async () => {
     try {
@@ -252,8 +227,12 @@ const CustomerHome = () => {
         setProperty(response.data);
       }
     } catch (err) {
-      // Graceful fallback to destination configured default property
-      console.log('Using configured destination property defaults');
+      const message = err.response?.data?.error
+        || (err.response
+          ? `The property service returned an error (${err.response.status}).`
+          : 'Unable to connect to the property service. Please try again later.');
+      console.error('Failed to load the current property', err);
+      toast.error(message);
     }
   };
 
@@ -263,16 +242,20 @@ const CustomerHome = () => {
       setLoadingRooms(true);
       const typeParam = type === 'All' ? undefined : type;
       const response = await roomAPI.getAvailableRooms(inDate, outDate, typeParam);
-      const roomsFromApi = response.data || [];
-      if (roomsFromApi.length > 0) {
-        setRooms(roomsFromApi);
-      } else {
-        setRooms(fallbackRoomCatalog.filter((room) => type === 'All' || room.roomType.toLowerCase().includes(type.toLowerCase())));
+      if (!Array.isArray(response.data)) {
+        throw new Error('The room service returned an invalid room list.');
       }
+      setRooms(response.data);
+      setRoomsError('');
     } catch (err) {
+      const message = err.response?.data?.error
+        || (err.response
+          ? `The room service returned an error (${err.response.status}).`
+          : err.message || 'Unable to connect to the room service. Please try again later.');
       console.error('Failed to load rooms', err);
-      setRooms(fallbackRoomCatalog.filter((room) => type === 'All' || room.roomType.toLowerCase().includes(type.toLowerCase())));
-      toast.error('Unable to fetch available rooms at this time');
+      setRooms([]);
+      setRoomsError(message);
+      toast.error(message);
     } finally {
       setLoadingRooms(false);
       setHasLoadedRooms(true);
@@ -286,7 +269,6 @@ const CustomerHome = () => {
       return;
     }
     fetchRooms(checkInDate, checkOutDate, selectedTypeFilter);
-    toast.success('Updated room availability for Sri Lanka Main Property');
     const roomsEl = document.getElementById('rooms');
     if (roomsEl) {
       roomsEl.scrollIntoView({ behavior: 'smooth' });
@@ -382,7 +364,7 @@ const CustomerHome = () => {
   };
 
   const getRoomPhoto = (room) => {
-    if (room?.images && room.images.length > 0 && room.images[0]) {
+    if (Array.isArray(room?.images) && room.images.length > 0 && room.images[0]) {
       return room.images[0];
     }
 
@@ -410,6 +392,12 @@ const CustomerHome = () => {
     }
     return featureProfile.image || roomDeluxePhoto;
   };
+
+  const selectedRoomGallery = selectedRoomDetails
+    ? (Array.isArray(selectedRoomDetails.galleryImages) && selectedRoomDetails.galleryImages.length > 0
+      ? selectedRoomDetails.galleryImages
+      : [getRoomPhoto(selectedRoomDetails)])
+    : [];
 
   const pricing = bookingModalRoom
     ? calculateTotal(bookingModalRoom, bookingFormData.checkInDate, bookingFormData.checkOutDate)
@@ -533,33 +521,33 @@ const CustomerHome = () => {
             }}>
               <FaBed size={40} style={{ color: 'var(--c-sand)', marginBottom: '1rem' }} />
               <h3 style={{ color: 'var(--c-forest-deep)', marginBottom: '0.5rem', fontWeight: 400 }}>
-                No rooms available for the selected dates
+                {roomsError ? 'Room availability is unavailable' : 'No rooms available for the selected dates'}
               </h3>
               <p style={{ color: 'var(--c-text-secondary)', margin: '0.5rem auto 1.5rem auto', lineHeight: 1.6 }}>
-                Please adjust your check-in and check-out dates, or select "All Accommodations" to explore other available options.
+                {roomsError || 'Please adjust your check-in and check-out dates, or select "All Accommodations" to explore other available options.'}
               </p>
               <button 
                 type="button" 
                 className="dest-hero-btn-primary"
-                onClick={() => handleFilterClick('All')}
+                onClick={() => fetchRooms(checkInDate, checkOutDate, selectedTypeFilter)}
                 style={{ padding: '0.75rem 1.75rem', fontSize: '0.8rem' }}
               >
-                Show All Available Rooms
+                {roomsError ? 'Retry' : 'Refresh Availability'}
               </button>
             </div>
           ) : (
             <div className="dest-rooms-grid">
               {rooms.slice(0, showAllRooms ? rooms.length : 3).map((room, roomIndex) => {
                 const roomProfile = getFeatureRoomProfile(room, roomIndex);
-                const photo = roomProfile.image;
-                const maxAdults = room.capacity?.maxAdults || 2;
-                const maxOcc = room.capacity?.maxOccupancy || 2;
-                const displayName = roomProfile.name;
-                const displayPrice = Number(room.basePrice || room.price || roomProfile.price || 0);
-                const displaySize = room.roomSize || roomProfile.roomSize;
-                const displayBed = room.bedConfiguration || roomProfile.bedType;
-                const guestInfo = room.capacity ? `Up to ${maxOcc} Guests (${maxAdults} Adults)` : roomProfile.guestCapacity;
-                const displayFacilities = (room.amenities && room.amenities.length > 0 ? room.amenities : roomProfile.facilities).slice(0, 6);
+                const photo = getRoomPhoto(room) || roomProfile.image;
+                const displayName = room.name || room.roomName || room.roomType || 'Room';
+                const displayPrice = Number(room.basePrice ?? room.price);
+                const displaySize = room.roomSize || 'Not specified';
+                const displayBed = room.bedConfiguration || 'Not specified';
+                const guestInfo = room.capacity
+                  ? `Up to ${room.capacity.maxOccupancy || 'N/A'} Guests (${room.capacity.maxAdults || 'N/A'} Adults)`
+                  : 'Not specified';
+                const displayFacilities = Array.isArray(room.amenities) ? room.amenities.slice(0, 6) : [];
 
                 return (
                   <div key={room._id} className="dest-room-card">
@@ -571,7 +559,7 @@ const CustomerHome = () => {
                         loading="lazy"
                       />
                       <div className="dest-room-tag">
-                        {room.roomType || roomProfile.type}
+                        {room.roomType || 'Room type not specified'}
                       </div>
                       <div className="dest-room-avail-badge">
                         Available
@@ -585,14 +573,14 @@ const CustomerHome = () => {
                         </h3>
                         <div className="dest-room-price">
                           <span className="dest-room-price-val">
-                            Rs. {displayPrice.toLocaleString()}
+                            {Number.isFinite(displayPrice) ? `Rs. ${displayPrice.toLocaleString()}` : 'Rate unavailable'}
                           </span>
                           <span className="dest-room-price-sub"> / night</span>
                         </div>
                       </div>
 
                       <p className="dest-room-desc">
-                        {room.description || roomProfile.description}
+                        {room.description || 'Details not provided.'}
                       </p>
 
                       <div className="dest-room-specs">
@@ -611,11 +599,11 @@ const CustomerHome = () => {
                       </div>
 
                       <div className="dest-room-feature-list">
-                        {displayFacilities.map((facility, index) => (
+                        {displayFacilities.length > 0 ? displayFacilities.map((facility, index) => (
                           <span key={`${room._id}-${facility}-${index}`} className="dest-room-feature-item">
                             <FaCheck /> {facility}
                           </span>
-                        ))}
+                        )) : <span className="dest-room-feature-item">No amenities listed.</span>}
                       </div>
 
                       <div className="dest-room-actions">
@@ -627,21 +615,18 @@ const CustomerHome = () => {
                             setSelectedRoomDetails({
                             ...room,
                             name: displayName,
-                            roomType: displayName,
+                            roomType: room.roomType || displayName,
                             roomNumber: room.roomNumber || 'N/A',
-                            description: room.description || roomProfile.description,
+                            description: room.description || '',
                             bedConfiguration: displayBed,
                             roomSize: displaySize,
                             price: displayPrice,
                             basePrice: displayPrice,
-                            capacity: {
-                              maxOccupancy: maxOcc,
-                              maxAdults: maxAdults,
-                              ...room.capacity
-                            },
                             amenities: displayFacilities,
                             featureImage: photo,
-                            galleryImages: roomProfile.galleryImages
+                            galleryImages: Array.isArray(room.galleryImages) && room.galleryImages.length > 0
+                              ? room.galleryImages
+                              : Array.isArray(room.images) && room.images.length > 0 ? room.images : [photo]
                             });
                           }}
                         >
@@ -720,12 +705,16 @@ const CustomerHome = () => {
 
             <div className="portal-modal-body">
               <div className="room-gallery-main">
-                <img src={selectedRoomDetails.galleryImages?.[roomGalleryIndex] || getRoomPhoto(selectedRoomDetails)} alt={selectedRoomDetails.roomType} />
-                <button type="button" className="room-gallery-arrow previous" aria-label="Previous room photo" onClick={() => setRoomGalleryIndex((index) => (index - 1 + selectedRoomDetails.galleryImages.length) % selectedRoomDetails.galleryImages.length)}>‹</button>
-                <button type="button" className="room-gallery-arrow next" aria-label="Next room photo" onClick={() => setRoomGalleryIndex((index) => (index + 1) % selectedRoomDetails.galleryImages.length)}>›</button>
+                <img src={selectedRoomGallery[roomGalleryIndex % selectedRoomGallery.length]} alt={selectedRoomDetails.roomType} />
+                {selectedRoomGallery.length > 1 && (
+                  <>
+                    <button type="button" className="room-gallery-arrow previous" aria-label="Previous room photo" onClick={() => setRoomGalleryIndex((index) => (index - 1 + selectedRoomGallery.length) % selectedRoomGallery.length)}>‹</button>
+                    <button type="button" className="room-gallery-arrow next" aria-label="Next room photo" onClick={() => setRoomGalleryIndex((index) => (index + 1) % selectedRoomGallery.length)}>›</button>
+                  </>
+                )}
               </div>
               <div className="room-gallery-thumbnails">
-                {(selectedRoomDetails.galleryImages || [getRoomPhoto(selectedRoomDetails)]).map((image, index) => (
+                {selectedRoomGallery.map((image, index) => (
                   <button type="button" key={image} className={`room-gallery-thumb ${index === roomGalleryIndex ? 'active' : ''}`} onClick={() => setRoomGalleryIndex(index)} aria-label={`Show room photo ${index + 1}`}><img src={image} alt={`${selectedRoomDetails.roomType} view ${index + 1}`} /></button>
                 ))}
               </div>
@@ -733,10 +722,10 @@ const CustomerHome = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem' }}>
                 <div>
                   <span style={{ fontSize: '0.8rem', color: 'var(--c-brass)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.1em' }}>
-                    {selectedRoomDetails.building || 'Main Pavilion'} &bull; Floor {selectedRoomDetails.floor || 1}
+                    {selectedRoomDetails.building || 'Building not specified'} &bull; Floor {selectedRoomDetails.floor || 'Not specified'}
                   </span>
                   <div style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--c-forest-deep)', marginTop: '0.2rem' }}>
-                    {selectedRoomDetails.bedConfiguration || 'Double Bed'}
+                    {selectedRoomDetails.bedConfiguration || 'Bed configuration not specified'}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -748,7 +737,7 @@ const CustomerHome = () => {
               </div>
 
               <p style={{ color: 'var(--c-text-secondary)', lineHeight: 1.7, marginBottom: '1.5rem' }}>
-                {selectedRoomDetails.description || 'Chic sanctuary guestroom featuring artisanal furnishings, ergonomic workspace, and peaceful tropical views.'}
+                {selectedRoomDetails.description || 'Room description not provided.'}
               </p>
 
               {/* Room Specifications Table */}
@@ -763,10 +752,10 @@ const CustomerHome = () => {
                 marginBottom: '1.5rem',
                 fontSize: '0.875rem'
               }}>
-                <div><strong>Max Occupancy:</strong> {selectedRoomDetails.capacity?.maxOccupancy || 2} Guests</div>
-                <div><strong>Max Adults:</strong> {selectedRoomDetails.capacity?.maxAdults || 2} Adults</div>
-                <div><strong>View:</strong> {selectedRoomDetails.view || 'Scenic Tropical View'}</div>
-                <div><strong>Room Size:</strong> {selectedRoomDetails.roomSize || 'Standard'}</div>
+                <div><strong>Max Occupancy:</strong> {selectedRoomDetails.capacity?.maxOccupancy || 'Not specified'}</div>
+                <div><strong>Max Adults:</strong> {selectedRoomDetails.capacity?.maxAdults || 'Not specified'}</div>
+                <div><strong>View:</strong> {selectedRoomDetails.view || 'Not specified'}</div>
+                <div><strong>Room Size:</strong> {selectedRoomDetails.roomSize || 'Not specified'}</div>
               </div>
 
               {/* Amenities */}
@@ -775,20 +764,14 @@ const CustomerHome = () => {
                   Room Amenities & Inclusions
                 </h4>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {(selectedRoomDetails.amenities && selectedRoomDetails.amenities.length > 0) ? (
+                  {(Array.isArray(selectedRoomDetails.amenities) && selectedRoomDetails.amenities.length > 0) ? (
                     selectedRoomDetails.amenities.map((item, idx) => (
                       <span key={idx} className="portal-amenity-pill">
                         &bull; {item}
                       </span>
                     ))
                   ) : (
-                    <>
-                      <span className="portal-amenity-pill">&bull; High-Speed Wi-Fi</span>
-                      <span className="portal-amenity-pill">&bull; Smart Entertainment</span>
-                      <span className="portal-amenity-pill">&bull; Climate Control</span>
-                      <span className="portal-amenity-pill">&bull; En-suite Rainfall Shower</span>
-                      <span className="portal-amenity-pill">&bull; Daily Housekeeping</span>
-                    </>
+                    <span className="portal-amenity-pill">No amenities listed.</span>
                   )}
                 </div>
               </div>

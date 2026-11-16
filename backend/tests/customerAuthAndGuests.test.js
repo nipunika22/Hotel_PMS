@@ -71,6 +71,7 @@ describe("CUSTOMER AUTH PERSISTENCE & ADMIN GUEST MANAGEMENT TEST SUITE", () => 
     if (server) {
       await new Promise((resolve) => server.close(resolve));
     }
+    await connectDB.stopDB();
   });
 
   // 1 & 2: Registration & MongoDB Persistence
@@ -348,9 +349,12 @@ describe("CUSTOMER AUTH PERSISTENCE & ADMIN GUEST MANAGEMENT TEST SUITE", () => 
     if (!room) {
       room = await Room.create({
         property: pilotProperty._id,
-        roomNumber: "305",
+        roomNumber: `TEST-${TEST_RUN_ID}`,
         roomType: "Deluxe",
+        floor: 1,
         basePrice: 150,
+        capacity: { maxAdults: 2, maxOccupancy: 2 },
+        bedConfiguration: "King Bed",
         status: "Available"
       });
     }

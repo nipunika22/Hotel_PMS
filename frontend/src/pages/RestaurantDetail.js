@@ -24,7 +24,6 @@ import RestaurantReservationModal from '../components/RestaurantReservationModal
 import RestaurantOfferModal from '../components/RestaurantOfferModal';
 import RestaurantGalleryLightbox from '../components/RestaurantGalleryLightbox';
 import { restaurantAPI } from '../services/api';
-import { DEFAULT_RESTAURANTS } from '../config/restaurantData';
 import './RestaurantExperience.css';
 
 const DIETARY_FILTERS = [
@@ -82,28 +81,34 @@ const RestaurantDetail = () => {
       setLoading(true);
       setError(null);
       const targetSlug = slug || 'azure-tide';
-      const fallbackRestaurant = DEFAULT_RESTAURANTS.find((item) => item.slug === targetSlug);
       const res = await restaurantAPI.getRestaurantBySlug(targetSlug);
-      if (res.data?.data) {
-        setRestaurant(res.data.data);
-        if (res.data.data.menuCategories && res.data.data.menuCategories.length > 0) {
-          setActiveCategoryTab(res.data.data.menuCategories[0]._id);
+      const restaurantData = res.data?.data;
+      if (restaurantData && typeof restaurantData === 'object' && !Array.isArray(restaurantData)) {
+        const normalizedRestaurant = {
+          ...restaurantData,
+          menuCategories: Array.isArray(restaurantData.menuCategories) ? restaurantData.menuCategories : [],
+          buffets: Array.isArray(restaurantData.buffets) ? restaurantData.buffets : [],
+          offers: Array.isArray(restaurantData.offers) ? restaurantData.offers : [],
+          gallery: Array.isArray(restaurantData.gallery) ? restaurantData.gallery : [],
+          diningStyles: Array.isArray(restaurantData.diningStyles) ? restaurantData.diningStyles : [],
+          amenities: Array.isArray(restaurantData.amenities) ? restaurantData.amenities : [],
+          facilities: Array.isArray(restaurantData.facilities) ? restaurantData.facilities : []
+        };
+        setRestaurant(normalizedRestaurant);
+        if (normalizedRestaurant.menuCategories.length > 0) {
+          setActiveCategoryTab(normalizedRestaurant.menuCategories[0]._id);
         }
-      } else if (fallbackRestaurant) {
-        setRestaurant(fallbackRestaurant);
-        setError(null);
       } else {
-        setError('The requested dining venue is currently unavailable.');
+        setRestaurant(null);
+        setError('The restaurant service returned an invalid restaurant record.');
       }
     } catch (err) {
       console.error('Failed to load restaurant details', err);
-      const fallbackRestaurant = DEFAULT_RESTAURANTS.find((item) => item.slug === slug);
-      if (fallbackRestaurant) {
-        setRestaurant(fallbackRestaurant);
-        setError(null);
-      } else {
-        setError('Restaurant could not be found or is unavailable.');
-      }
+      setRestaurant(null);
+      setError(err.response?.data?.error
+        || (err.response
+          ? `The restaurant service returned an error (${err.response.status}).`
+          : err.message || 'Unable to connect to the restaurant service. Please try again later.'));
     } finally {
       setLoading(false);
     }
@@ -158,7 +163,7 @@ const RestaurantDetail = () => {
       <CustomerLayout variant="solid">
         <div style={{ textAlign: 'center', padding: '10rem 2rem', maxWidth: '640px', margin: '0 auto', minHeight: '70vh' }}>
           <h2 style={{ color: 'var(--c-forest-deep)', fontSize: '2.4rem', marginBottom: '0.75rem' }}>
-            Restaurant Not Found
+            {error ? 'Unable to Load Restaurant' : 'Restaurant Not Found'}
           </h2>
           <p style={{ color: 'var(--c-text-muted)', margin: '1rem 0 2rem 0', fontSize: '1.05rem', lineHeight: 1.6 }}>
             {error || 'The requested dining venue could not be found or is currently unavailable.'}

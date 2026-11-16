@@ -42,6 +42,8 @@ const OCCASIONS = [
   'Other'
 ];
 
+const EMPTY_RESTAURANTS = [];
+
 const RestaurantReservationModal = ({ 
   isOpen, 
   onClose, 
@@ -49,10 +51,12 @@ const RestaurantReservationModal = ({
   preselectedDiningType = 'À la carte',
   preselectedBuffetId = null,
   preselectedOfferId = null,
-  restaurantsList = []
+  restaurantsList = EMPTY_RESTAURANTS
 }) => {
-  const [restaurants, setRestaurants] = useState(restaurantsList);
+  const [restaurants, setRestaurants] = useState(Array.isArray(restaurantsList) ? restaurantsList : []);
   const [selectedRestaurantId, setSelectedRestaurantId] = useState('');
+  const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [restaurantLoadError, setRestaurantLoadError] = useState('');
   
   // Form fields
   const [date, setDate] = useState(() => format(addDays(new Date(), 1), 'yyyy-MM-dd'));
@@ -98,10 +102,12 @@ const RestaurantReservationModal = ({
 
   // Initial load
   useEffect(() => {
-    if (restaurantsList && restaurantsList.length > 0) {
-      setRestaurants(restaurantsList);
+    const providedRestaurants = Array.isArray(restaurantsList) ? restaurantsList : [];
+    if (providedRestaurants.length > 0) {
+      setRestaurants(providedRestaurants);
+      setRestaurantLoadError('');
       if (!selectedRestaurantId) {
-        setSelectedRestaurantId(preselectedRestaurant?._id || restaurantsList[0]._id);
+        setSelectedRestaurantId(preselectedRestaurant?._id || providedRestaurants[0]._id);
       }
     } else {
       loadRestaurants();
@@ -119,15 +125,32 @@ const RestaurantReservationModal = ({
 
   const loadRestaurants = async () => {
     try {
+      setLoadingRestaurants(true);
+      setRestaurantLoadError('');
       const res = await restaurantAPI.getRestaurants();
-      if (res.data?.data) {
-        setRestaurants(res.data.data);
-        if (res.data.data.length > 0 && !selectedRestaurantId) {
-          setSelectedRestaurantId(preselectedRestaurant?._id || res.data.data[0]._id);
-        }
+      const restaurantData = res.data?.data;
+      if (!Array.isArray(restaurantData)) {
+        throw new Error('The restaurant service returned an invalid restaurant list.');
+      }
+      setRestaurants(restaurantData);
+      if (restaurantData.length > 0 && !selectedRestaurantId) {
+        setSelectedRestaurantId(preselectedRestaurant?._id || restaurantData[0]._id);
+      } else if (restaurantData.length === 0) {
+        setSelectedRestaurantId('');
+        setRestaurantLoadError('No restaurants are currently available.');
       }
     } catch (err) {
       console.error('Failed to load restaurants list', err);
+      const message = err.response?.data?.error
+        || (err.response
+          ? `The restaurant service returned an error (${err.response.status}).`
+          : err.message || 'Unable to connect to the restaurant service. Please try again later.');
+      setRestaurants([]);
+      setSelectedRestaurantId('');
+      setRestaurantLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoadingRestaurants(false);
     }
   };
 
@@ -409,14 +432,28 @@ const RestaurantReservationModal = ({
                   className="rest-form-select"
                   value={selectedRestaurantId}
                   onChange={(e) => setSelectedRestaurantId(e.target.value)}
+                  disabled={loadingRestaurants || restaurants.length === 0}
                   required
                 >
+                  {restaurants.length === 0 && (
+                    <option value="">
+                      {loadingRestaurants ? 'Loading restaurants...' : 'No restaurants available'}
+                    </option>
+                  )}
                   {restaurants.map((rest) => (
                     <option key={rest._id} value={rest._id}>
                       {rest.name} &bull; {rest.cuisine}
                     </option>
                   ))}
                 </select>
+                {restaurantLoadError && (
+                  <p role="alert" style={{ color: '#b42318', margin: '0.5rem 0 0' }}>
+                    {restaurantLoadError}{' '}
+                    <button type="button" className="rest-btn-secondary" onClick={loadRestaurants}>
+                      Retry
+                    </button>
+                  </p>
+                )}
               </div>
 
               {/* 2. Date, Time & Guest Count Grid */}
@@ -697,7 +734,7 @@ const RestaurantReservationModal = ({
                 <button 
                   type="submit" 
                   className="rest-btn-primary"
-                  disabled={submitting}
+                  disabled={submitting || loadingRestaurants || restaurants.length === 0 || !selectedRestaurantId}
                 >
                   {submitting ? 'Confirming Table...' : 'Confirm Reservation'}
                 </button>

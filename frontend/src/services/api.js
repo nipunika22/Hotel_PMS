@@ -1,7 +1,12 @@
 // frontend/src/services/api.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://hotelmanagementsystem-dq0i.onrender.com/api';
+const configuredAPIUrl = (process.env.REACT_APP_API_URL || 'https://hotel-pms-backe.vercel.app/api')
+  .trim()
+  .replace(/\/+$/, '');
+const API_URL = /\/api$/i.test(configuredAPIUrl)
+  ? configuredAPIUrl
+  : `${configuredAPIUrl}/api`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -341,4 +346,3 @@ export const paymentAPI = {
 };
 
 export default api;
-

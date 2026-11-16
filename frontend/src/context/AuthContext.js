@@ -4,6 +4,11 @@ import { authAPI } from '../services/api';
 
 const AuthContext = createContext();
 
+const getAuthErrorMessage = (error, action) => error.response?.data?.error
+  || (error.response
+    ? `${action} request failed with status ${error.response.status}.`
+    : `Unable to connect to the hotel service. Please try again later.`);
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -84,9 +89,9 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true, user: userData };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Login failed' 
+      return {
+        success: false,
+        error: getAuthErrorMessage(error, 'Login')
       };
     }
   };
@@ -107,9 +112,9 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true, user: userData };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Registration failed' 
+      return {
+        success: false,
+        error: getAuthErrorMessage(error, 'Registration')
       };
     }
   };

@@ -21,7 +21,6 @@ import RestaurantOfferModal from '../components/RestaurantOfferModal';
 import { restaurantAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import './RestaurantExperience.css';
-import { DEFAULT_RESTAURANTS } from '../config/restaurantData';
 import { DINING_PROMOTIONAL_EXPERIENCES } from '../config/diningExperiences';
 
 const DINING_OFFER_IMAGES = [
@@ -68,6 +67,7 @@ const DiningLanding = () => {
 
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // Reservation Modal State
   const [resModalOpen, setResModalOpen] = useState(false);
@@ -95,11 +95,16 @@ const DiningLanding = () => {
     try {
       setLoading(true);
       const res = await restaurantAPI.getRestaurants();
-      if (res.data?.data && res.data.data.length > 0) {
-        setRestaurants(res.data.data);
+      const restaurantData = res.data?.data;
+      if (!Array.isArray(restaurantData)) {
+        throw new Error('The restaurant service returned an invalid restaurant list.');
+      }
+      setRestaurants(restaurantData);
+      setLoadError('');
 
+      if (restaurantData.length > 0) {
         // Load offers for every restaurant displayed on this page.
-        const offerResponses = await Promise.all(res.data.data.map(async (restaurant) => {
+        const offerResponses = await Promise.all(restaurantData.map(async (restaurant) => {
           if (!restaurant._id) return [];
           try {
             const offersRes = await restaurantAPI.getRestaurantOffers(restaurant._id);
@@ -111,11 +116,16 @@ const DiningLanding = () => {
         }));
         setOffersList(offerResponses.flat());
       } else {
-        setRestaurants(DEFAULT_RESTAURANTS);
+        setOffersList([]);
       }
     } catch (err) {
       console.error('Failed to load dining page data', err);
-      setRestaurants(DEFAULT_RESTAURANTS);
+      setRestaurants([]);
+      setOffersList([]);
+      setLoadError(err.response?.data?.error
+        || (err.response
+          ? `The restaurant service returned an error (${err.response.status}).`
+          : err.message || 'Unable to connect to the restaurant service. Please try again later.'));
     } finally {
       setLoading(false);
     }
@@ -245,6 +255,7 @@ const DiningLanding = () => {
                 className="rest-btn-secondary"
                 style={{ padding: '0.45rem 1.1rem', fontSize: '0.78rem', borderColor: 'var(--c-brass)' }}
                 onClick={() => handleOpenReservation(restaurants[0])}
+                disabled={restaurants.length === 0}
               >
                 Book Your Table
               </button>
@@ -270,6 +281,15 @@ const DiningLanding = () => {
             <div style={{ textAlign: 'center', padding: '4rem 0' }}>
               <div className="spinner" />
               <p style={{ color: 'var(--c-text-muted)', marginTop: '1rem' }}>Curating our culinary venues...</p>
+            </div>
+          ) : loadError ? (
+            <div role="alert" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--c-text-secondary)' }}>
+              <p>{loadError}</p>
+              <button type="button" className="rest-btn-secondary" onClick={fetchDiningData}>Retry</button>
+            </div>
+          ) : restaurants.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--c-text-secondary)' }}>
+              No restaurants are currently available.
             </div>
           ) : (
             restaurants.map((rest, idx) => {
@@ -429,6 +449,7 @@ const DiningLanding = () => {
                   <button 
                     type="button"
                     className="rest-btn-secondary"
+                    disabled={restaurants.length === 0}
                     onClick={() => {
                       const spice = restaurants.find(r => r.slug === 'spice-and-silk') || restaurants[1];
                       handleOpenReservation(spice, 'Buffet');

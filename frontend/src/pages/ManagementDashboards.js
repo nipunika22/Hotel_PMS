@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FaBed, FaCalendarCheck, FaUtensils, FaTag, FaGlassCheers, FaPlus, FaArrowRight, FaSyncAlt } from 'react-icons/fa';
 import { roomAPI, reservationAPI, restaurantAPI, eventAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-const { getDepartmentNavigation } = require('../config/roleAccess');
+import { getDepartmentNavigation } from '../config/roleAccess';
 import './ManagementDashboards.css';
 
 const displayValue = (value) => value == null ? 'Unavailable' : Number(value).toLocaleString();

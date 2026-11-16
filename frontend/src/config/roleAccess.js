@@ -103,7 +103,21 @@ function hasDepartmentPermission(user, required) {
   return requiredList.some((permission) => grants.has(permission));
 }
 
-module.exports = {
+export {
+  CUSTOMER_ROLE,
+  SUPER_ADMIN_ROLE,
+  STAFF_ROLES,
+  ROUTE_ROLES,
+  DEPARTMENT_NAVIGATION,
+  DEPARTMENT_PERMISSION_OPTIONS,
+  normalizeRole,
+  getLandingPath,
+  canAccessRoute,
+  hasDepartmentPermission,
+  getDepartmentNavigation
+};
+
+export default {
   CUSTOMER_ROLE,
   SUPER_ADMIN_ROLE,
   STAFF_ROLES,

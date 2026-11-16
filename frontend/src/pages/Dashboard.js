@@ -22,7 +22,7 @@ import { reservationAPI, roomAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 import { StatsSkeleton } from '../components/ui/LoadingSkeleton';
-const { STAFF_ROLES, getDepartmentNavigation } = require('../config/roleAccess');
+import { STAFF_ROLES, getDepartmentNavigation } from '../config/roleAccess';
 
 const Dashboard = () => {
   const { user } = useAuth();

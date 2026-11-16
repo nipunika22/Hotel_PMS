@@ -58,7 +58,7 @@ import AdminNotifications from './pages/AdminNotifications';
 import SuperAdminPanel from './pages/SuperAdminPanel';
 import { RoomManagementDashboard, RestaurantManagementDashboard, EventManagementDashboard } from './pages/ManagementDashboards';
 import Attendance from './pages/Attendance';
-const { getLandingPath, normalizeRole, ROUTE_ROLES, STAFF_ROLES, SUPER_ADMIN_ROLE, hasDepartmentPermission } = require('./config/roleAccess');
+import { getLandingPath, normalizeRole, ROUTE_ROLES, STAFF_ROLES, SUPER_ADMIN_ROLE, hasDepartmentPermission } from './config/roleAccess';
 
 function UnauthorizedAccess({ role }) {
   const destination = getLandingPath(role);

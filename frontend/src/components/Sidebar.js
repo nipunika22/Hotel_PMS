@@ -26,7 +26,7 @@ import {
   FaChartPie
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
-const { ROUTE_ROLES, STAFF_ROLES, normalizeRole, hasDepartmentPermission, getDepartmentNavigation } = require('../config/roleAccess');
+import { ROUTE_ROLES, STAFF_ROLES, normalizeRole, hasDepartmentPermission, getDepartmentNavigation } from '../config/roleAccess';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();

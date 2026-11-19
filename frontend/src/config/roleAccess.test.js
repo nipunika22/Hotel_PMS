@@ -1,4 +1,4 @@
-const { canAccessRoute, getLandingPath, ROUTE_ROLES, STAFF_ROLES, hasDepartmentPermission, getDepartmentNavigation } = require('./roleAccess');
+import { canAccessRoute, getLandingPath, ROUTE_ROLES, STAFF_ROLES, hasDepartmentPermission, getDepartmentNavigation } from './roleAccess';
 
 describe('role navigation policy', () => {
   test('maps every stored role to its intended landing route', () => {

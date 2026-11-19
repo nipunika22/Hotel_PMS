@@ -20,7 +20,6 @@
     "moment": "^2.30.1",
     "mongoose": "^8.15.0",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.3",
     "openai": "^7.39.0",
     "pdfmake": "^0.2.7",
     "sharp": "^0.34.2",

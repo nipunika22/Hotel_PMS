@@ -79,7 +79,7 @@ const Login = () => {
   };
 
   const handleForgotPassword = () => {
-    toast.info('To reset your credentials, please contact the sanctuary front desk or concierge.');
+    navigate('/register');
   };
 
   return (

@@ -385,7 +385,6 @@ function AppContent() {
             </PublicRoute>
           } 
         />
-
         {/* Dynamic /dashboard Resolver */}
         <Route 
           path="/dashboard" 

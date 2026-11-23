@@ -80,6 +80,7 @@ async function createReservation(data, options = {}) {
     numberOfNights: dates.nights,
     ...charges,
     numberOfGuests: data.numberOfGuests || Number(data.numberOfAdults || 0) + Number(data.numberOfChildren || 0),
+    paymentMethod: data.paymentMethod || "Unspecified",
     status: data.status || "Confirmed"
   });
   await reservation.save({ session });

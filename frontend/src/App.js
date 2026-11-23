@@ -184,7 +184,7 @@ const RoleBasedDashboard = () => {
   }
 
   // 3. Unknown or unauthorized role -> Safe error screen (NEVER treat as admin!)
-    return <UnauthorizedAccess role={role} />;
+  return <UnauthorizedAccess role={role} />;
 };
 
 // Unified Profile Route (Adapts layout depending on role)
@@ -369,346 +369,347 @@ function AppContent() {
         <Route path="/offers/detail/:offerId" element={<Offers />} />
 
         {/* Public Authentication Routes */}
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
             <PublicRoute>
               <Login />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/register" 
+        <Route
+          path="/register"
           element={
             <PublicRoute>
               <Register />
             </PublicRoute>
-          } 
+          }
         />
+
         {/* Dynamic /dashboard Resolver */}
-        <Route 
-          path="/dashboard" 
-          element={<RoleBasedDashboard />} 
+        <Route
+          path="/dashboard"
+          element={<RoleBasedDashboard />}
         />
 
         {/* Internal Staff / Admin Dedicated Dashboard */}
-        <Route 
-          path="/admin-dashboard" 
+        <Route
+          path="/admin-dashboard"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.dashboard} departmentSelfService>
               <Dashboard />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Self-Service Profile (Role-adaptive Layout) */}
-        <Route 
-          path="/profile" 
-          element={<UnifiedProfileRoute />} 
+        <Route
+          path="/profile"
+          element={<UnifiedProfileRoute />}
         />
-        <Route 
-          path="/account" 
-          element={<Navigate to="/profile" replace />} 
+        <Route
+          path="/account"
+          element={<Navigate to="/profile" replace />}
         />
 
         {/* My Reservations (Customer Portal Layout) */}
-        <Route 
-          path="/my-bookings" 
-          element={<UnifiedBookingsRoute />} 
+        <Route
+          path="/my-bookings"
+          element={<UnifiedBookingsRoute />}
         />
-        <Route 
-          path="/my-reservations" 
-          element={<Navigate to="/my-bookings" replace />} 
+        <Route
+          path="/my-reservations"
+          element={<Navigate to="/my-bookings" replace />}
         />
 
         {/* Customer Payment Gateway Return & Verification Routes */}
-        <Route 
-          path="/payment/success" 
-          element={<CustomerRoute><PaymentSuccess /></CustomerRoute>} 
+        <Route
+          path="/payment/success"
+          element={<CustomerRoute><PaymentSuccess /></CustomerRoute>}
         />
-        <Route 
-          path="/payment/cancel" 
-          element={<CustomerRoute><PaymentCancel /></CustomerRoute>} 
+        <Route
+          path="/payment/cancel"
+          element={<CustomerRoute><PaymentCancel /></CustomerRoute>}
         />
 
         {/* Staff-Only Internal Management Routes */}
-        <Route 
-          path="/guests" 
+        <Route
+          path="/guests"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.guests} requiredPermission="reservations">
               <Guests />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/guests/new" 
+        <Route
+          path="/guests/new"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.guests} requiredPermission="reservations">
               <GuestForm />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/guests/:id" 
+        <Route
+          path="/guests/:id"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.guests} requiredPermission="reservations">
               <GuestDetails />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/guests/:id/edit" 
+        <Route
+          path="/guests/:id/edit"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.guests} requiredPermission="reservations">
               <GuestForm />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Reservation Routes (Staff/Admin only) */}
         <Route path="/rooms/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.roomDashboard} requiredPermission="rooms"><RoomManagementDashboard /></StaffRoute>} />
         <Route path="/admin/restaurants/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.restaurantDashboard} requiredPermission="dining"><RestaurantManagementDashboard /></StaffRoute>} />
         <Route path="/admin/events/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.eventDashboard} requiredPermission="events"><EventManagementDashboard /></StaffRoute>} />
-        <Route 
-          path="/reservations" 
+        <Route
+          path="/reservations"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.reservations} requiredPermission="reservations">
               <Reservations />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reservations/new" 
+        <Route
+          path="/reservations/new"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.reservations} requiredPermission="reservations">
               <ReservationForm />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reservations/:id" 
+        <Route
+          path="/reservations/:id"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.reservations} requiredPermission="reservations">
               <ReservationDetails />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reservations/:id/edit" 
+        <Route
+          path="/reservations/:id/edit"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.reservations} requiredPermission="reservations">
               <ReservationForm />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Room Routes (Staff/Admin only) */}
-        <Route 
-          path="/rooms" 
+        <Route
+          path="/rooms"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.rooms} requiredPermission="rooms">
               <Rooms />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/rooms/new" 
+        <Route
+          path="/rooms/new"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.roomForm} requiredPermission="rooms">
               <RoomForm />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/rooms/:id/edit" 
+        <Route
+          path="/rooms/:id/edit"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.roomForm} requiredPermission="rooms">
               <RoomForm />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Travel Agent Routes (Staff/Admin only) */}
-        <Route 
-          path="/travel-agents" 
+        <Route
+          path="/travel-agents"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.travelAgents}>
               <TravelAgents />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/travel-agents/new" 
+        <Route
+          path="/travel-agents/new"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.travelAgents}>
               <TravelAgentForm />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/travel-agents/:id/edit" 
+        <Route
+          path="/travel-agents/:id/edit"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.travelAgents}>
               <TravelAgentForm />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Expense Routes (Staff/Admin only) */}
-        <Route 
-          path="/expenses" 
+        <Route
+          path="/expenses"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.expenses}>
               <GuestExpenses />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/expenses/new" 
+        <Route
+          path="/expenses/new"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.expenses}>
               <ExpenseForm />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/expenses/:id/edit" 
+        <Route
+          path="/expenses/:id/edit"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.expenses}>
               <ExpenseForm />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Invoice Routes (Staff/Admin only) */}
-        <Route 
-          path="/invoices" 
+        <Route
+          path="/invoices"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.invoices}>
               <Invoices />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/invoices/:id" 
+        <Route
+          path="/invoices/:id"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.invoices}>
               <InvoiceDetails />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Financial Management & Payment Transactions Routes */}
-        <Route 
-          path="/admin/finance" 
+        <Route
+          path="/admin/finance"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.financialDashboard}>
               <FinancialDashboard />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/admin/payments" 
+        <Route
+          path="/admin/payments"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.payments}>
               <AdminPayments />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Housekeeping Route (Staff/Admin only) */}
-        <Route 
-          path="/housekeeping" 
+        <Route
+          path="/housekeeping"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.housekeeping}>
               <Housekeeping />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Maintenance Route (Staff/Admin only) */}
-        <Route 
-          path="/maintenance" 
+        <Route
+          path="/maintenance"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.maintenance}>
               <Maintenance />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Lost & Found Route (Staff/Admin only) */}
-        <Route 
-          path="/lost-and-found" 
+        <Route
+          path="/lost-and-found"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.lostAndFound}>
               <LostAndFound />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Reports Route (Staff/Admin only) */}
-        <Route 
-          path="/reports" 
+        <Route
+          path="/reports"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.reports}>
               <Reports />
             </StaffRoute>
-          } 
+          }
         />
 
         {/* Staff/Admin Restaurant & Dining Management Route */}
-        <Route 
-          path="/admin/restaurants" 
+        <Route
+          path="/admin/restaurants"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.restaurants} requiredPermission="dining">
               <AdminRestaurants departmentAdmin={Boolean(user?.departmentAdmin)} adminDepartments={user?.adminDepartments || []} adminPermissions={user?.adminPermissions || []} />
             </StaffRoute>
-          } 
+          }
         />
         <Route path="/admin/dining-offers" element={<StaffRoute allowedRoles={['super_admin', 'admin', 'manager', 'staff', 'finance']} requiredPermission={['dining', 'offers.dining']}><DepartmentDiningOffers /></StaffRoute>} />
-        <Route 
-          path="/restaurant-management" 
-          element={<Navigate to="/admin/restaurants" replace />} 
+        <Route
+          path="/restaurant-management"
+          element={<Navigate to="/admin/restaurants" replace />}
         />
 
         {/* Staff/Admin Event & Banquet Management Route */}
-        <Route 
-          path="/admin/events" 
+        <Route
+          path="/admin/events"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.events} requiredPermission="events">
               <AdminEvents />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/events-management" 
-          element={<Navigate to="/admin/events" replace />} 
+        <Route
+          path="/events-management"
+          element={<Navigate to="/admin/events" replace />}
         />
 
         {/* Centralized Notification Management Routes */}
-        <Route 
-          path="/notifications" 
-          element={<UnifiedNotificationsRoute />} 
+        <Route
+          path="/notifications"
+          element={<UnifiedNotificationsRoute />}
         />
-        <Route 
-          path="/admin/notifications" 
+        <Route
+          path="/admin/notifications"
           element={
             <StaffRoute allowedRoles={ROUTE_ROLES.adminNotifications}>
               <AdminNotifications />
             </StaffRoute>
-          } 
+          }
         />
-        <Route 
-          path="/admin-notifications" 
-          element={<Navigate to="/admin/notifications" replace />} 
+        <Route
+          path="/admin-notifications"
+          element={<Navigate to="/admin/notifications" replace />}
         />
 
         {/* Fallbacks */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      
-      <ToastContainer 
-        position="top-right" 
+
+      <ToastContainer
+        position="top-right"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop

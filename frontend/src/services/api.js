@@ -100,7 +100,9 @@ export const reservationAPI = {
   checkOut: (id, data) => api.put(`/reservations/${id}/check-out`, data),
   cancelReservation: (id, data) => api.put(`/reservations/${id}/cancel`, data),
   deleteReservation: (id) => api.delete(`/reservations/${id}`),
-  getDashboardStats: () => api.get('/reservations/dashboard-stats')
+  getDashboardStats: () => api.get('/reservations/dashboard-stats'),
+  getPayments: (id) => api.get(`/reservations/${id}/payments`),
+  recordPayment: (id, paymentData) => api.post('/payments', { reservationId: id, ...paymentData })
 };
 
 // Room API
@@ -335,6 +337,8 @@ export const aiConciergeAPI = {
 
 // Payment & Financial Management API
 export const paymentAPI = {
+  recordPayment: (data) => api.post('/payments', data),
+  getPaymentsByReservation: (reservationId) => api.get('/payments', { params: { reservation: reservationId } }),
   initiatePayment: (data) => api.post('/payments/initiate', data),
   verifyPaymentStatus: (reference) => api.get(`/payments/verify/${reference}`),
   getMyPayments: () => api.get('/payments/my-payments'),

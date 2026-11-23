@@ -194,6 +194,11 @@ exports.createBooking = async (req, res) => {
         const propertyId = room.property || req.propertyId || (await getActivePropertyId());
 
         // Create canonical operational Reservation through the shared service.
+        // Resolve canonical payment method for Reservation model
+        const canonicalPaymentMethod = (paymentMethod === "Pay at Front Desk" || !paymentMethod)
+          ? "Cash"
+          : (["Cash", "Card", "Online", "PayHere", "Bank Transfer", "Unspecified"].includes(paymentMethod) ? paymentMethod : "Cash");
+
         const canonicalReservation = await createReservation({
           property: propertyId,
           guest: guest._id,
@@ -210,6 +215,7 @@ exports.createBooking = async (req, res) => {
           roomCharges: totalPrice,
           totalAmount: totalPrice,
           paymentStatus: "Pending",
+          paymentMethod: canonicalPaymentMethod,
           status: "Confirmed",
           specialRequests: specialRequests || "",
           numberOfGuests: Number(numberOfGuests) || 1,
@@ -226,7 +232,7 @@ exports.createBooking = async (req, res) => {
           numberOfGuests: Number(numberOfGuests) || 1,
           totalPrice,
           specialRequests: specialRequests || "",
-          paymentMethod: paymentMethod || "Cash",
+          paymentMethod: canonicalPaymentMethod,
           paymentStatus: "pending",
           bookingStatus: "confirmed",
           reservationNumber: canonicalReservation.reservationNumber,

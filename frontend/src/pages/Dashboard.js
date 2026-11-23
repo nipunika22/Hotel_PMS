@@ -271,10 +271,10 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="pms-kpi-value" style={{ color: 'var(--c-forest-deep, #162E24)' }}>
-            Rs. {(stats?.revenueToday || 0).toLocaleString()}
+            LKR {(stats?.revenueToday || 0).toLocaleString()}
           </div>
           <div className="pms-kpi-subtext">
-            <span>Direct & Front-Desk Folios</span>
+            <span>Collected from Confirmed Payments</span>
           </div>
         </div>
       </div>

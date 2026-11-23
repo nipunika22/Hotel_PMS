@@ -14,6 +14,8 @@ const STATUS_MAP = {
   'Occupied':     'badge-danger',
   'Reserved':     'badge-info',
   'Cleaning':     'badge-warning',
+  'Cleaning Required': 'badge-warning',
+  'Cleaning In Progress': 'badge-info',
   'Maintenance':  'badge-secondary',
   'Out of Order': 'badge-danger',
 

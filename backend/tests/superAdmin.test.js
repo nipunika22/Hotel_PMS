@@ -48,6 +48,7 @@ describe("Super Admin API", () => {
   before(async () => {
     mongo = await MongoMemoryServer.create();
     await mongoose.connect(mongo.getUri());
+    await User.init();
     superAdmin = await User.create({ name: "Portfolio Admin", email: "portfolio@example.test", phone: "100", password: "test-password-123", role: "super_admin" });
     ordinaryAdmin = await User.create({ name: "Property Admin", email: "property-admin@example.test", phone: "101", password: "test-password-123", role: "admin" });
     const app = express();

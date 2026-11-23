@@ -13,7 +13,8 @@ const {
   cancelReservation,
   markNoShow,
   deleteReservation,
-  getDashboardStats
+  getDashboardStats,
+  getReservationPayments
 } = require("../controllers/reservationController");
 const { protect, authorize } = require("../middleware/auth");
 const requireDepartmentPermission = require("../middleware/requireDepartmentPermission");
@@ -23,6 +24,7 @@ router.get("/status", protect, authorize("admin", "staff"), requireDepartmentPer
 router.get("/date-range", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), getReservationsByDateRange);
 router.get("/dashboard-stats", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), getDashboardStats);
 router.get("/:id", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), getReservation);
+router.get("/:id/payments", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), getReservationPayments);
 router.post("/", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), createReservation);
 router.put("/:id", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), updateReservation);
 router.put("/:id/check-in", protect, authorize("admin", "staff"), requireDepartmentPermission("reservations"), checkIn);

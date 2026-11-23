@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const GuestExpense = require("../models/GuestExpense");
 const Reservation = require("../models/Reservation");
 const { buildPropertyFilter, getActivePropertyId } = require("../middleware/propertyContext");
+const billingService = require("../services/billingService");
 
 // Get all expenses
 exports.getExpenses = async (req, res) => {
@@ -141,6 +142,8 @@ exports.addExpense = async (req, res) => {
 
     const targetPropertyId = reservation.property || req.propertyId || (await getActivePropertyId());
 
+    const initialStatus = req.body.paymentStatus === "Paid" ? "Paid" : "Pending";
+
     const newExpense = new GuestExpense({
       property: targetPropertyId,
       reservation: reservationId,
@@ -154,21 +157,66 @@ exports.addExpense = async (req, res) => {
       taxPercentage: taxPct,
       taxAmount,
       totalAmount,
+      paymentStatus: initialStatus,
       notes,
       addedBy: req.user.id
     });
 
     await newExpense.save();
 
+    // If requested to directly add to bill at creation time
+    if (req.body.paymentStatus === "Added to Bill") {
+      await billingService.addExpenseToBill({
+        expenseId: newExpense._id,
+        staffUserId: req.user.id,
+        reservationId: reservation._id
+      });
+    }
+
     const expense = await GuestExpense.findById(newExpense._id)
       .populate("guest", "firstName lastName")
       .populate("reservation", "reservationNumber")
-      .populate("addedBy", "name");
+      .populate("addedBy", "name")
+      .populate("billedBy", "name")
+      .populate("invoice", "invoiceNumber totalAmount balanceDue paymentStatus");
 
     res.status(201).json(expense);
   } catch (err) {
     console.error("Add expense error:", err);
     res.status(500).json({ error: "Failed to add expense" });
+  }
+};
+
+// Add expense to bill / invoice
+exports.addExpenseToBill = async (req, res) => {
+  const { id } = req.params;
+  const staffUserId = req.user?.id || req.user?._id;
+  const { reservationId } = req.body || {};
+
+  try {
+    const result = await billingService.addExpenseToBill({
+      expenseId: id,
+      staffUserId,
+      reservationId
+    });
+
+    const populatedExpense = await GuestExpense.findById(id)
+      .populate("guest", "firstName lastName")
+      .populate("reservation", "reservationNumber")
+      .populate("addedBy", "name")
+      .populate("billedBy", "name")
+      .populate("invoice", "invoiceNumber totalAmount balanceDue paymentStatus");
+
+    res.status(200).json({
+      success: true,
+      message: result.message || "Expense successfully added to bill",
+      expense: populatedExpense,
+      invoice: result.invoice,
+      reservation: result.reservation
+    });
+  } catch (err) {
+    console.error("Add expense to bill error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to add expense to bill" });
   }
 };
 
@@ -182,6 +230,39 @@ exports.updateExpense = async (req, res) => {
 
     if (!expense) {
       return res.status(404).json({ error: "Expense not found" });
+    }
+
+    // Intercept transition to "Added to Bill"
+    if (updates.paymentStatus === "Added to Bill" && expense.paymentStatus !== "Added to Bill") {
+      const result = await billingService.addExpenseToBill({
+        expenseId: expense._id,
+        staffUserId: req.user.id,
+        reservationId: expense.reservation
+      });
+
+      const updatedExpense = await GuestExpense.findById(id)
+        .populate("guest", "firstName lastName")
+        .populate("reservation", "reservationNumber")
+        .populate("addedBy", "name")
+        .populate("billedBy", "name")
+        .populate("invoice", "invoiceNumber totalAmount balanceDue paymentStatus");
+
+      return res.json(updatedExpense);
+    }
+
+    // Intercept transition from "Added to Bill" back to "Pending"
+    if (updates.paymentStatus === "Pending" && expense.paymentStatus === "Added to Bill") {
+      await billingService.removeExpenseFromBill({
+        expenseId: expense._id,
+        staffUserId: req.user.id
+      });
+
+      const updatedExpense = await GuestExpense.findById(id)
+        .populate("guest", "firstName lastName")
+        .populate("reservation", "reservationNumber")
+        .populate("addedBy", "name");
+
+      return res.json(updatedExpense);
     }
 
     // Recalculate amounts if relevant fields are updated
@@ -206,22 +287,46 @@ exports.updateExpense = async (req, res) => {
 
     // Update other fields
     Object.keys(updates).forEach(key => {
-      if (key !== 'quantity' && key !== 'unitPrice' && key !== 'taxPercentage') {
+      if (key !== 'quantity' && key !== 'unitPrice' && key !== 'taxPercentage' && key !== 'paymentStatus') {
         expense[key] = updates[key];
       }
     });
 
+    if (updates.paymentStatus && updates.paymentStatus !== "Added to Bill") {
+      expense.paymentStatus = updates.paymentStatus;
+    }
+
     await expense.save();
+
+    // If already added to bill, update the item in the linked invoice
+    if (expense.paymentStatus === "Added to Bill" && expense.invoice) {
+      const Invoice = require("../models/Invoice");
+      const invoice = await Invoice.findById(expense.invoice);
+      if (invoice && Array.isArray(invoice.extraExpenses)) {
+        const item = invoice.extraExpenses.find(
+          (it) => (it.expense?.toString() === expense._id.toString() || it.expenseId?.toString() === expense._id.toString())
+        );
+        if (item) {
+          item.amount = totalAmount;
+          item.quantity = expense.quantity;
+          item.unitPrice = expense.unitPrice;
+          item.taxPercentage = expense.taxPercentage;
+          item.taxAmount = expense.taxAmount;
+          await billingService.recalculateInvoiceTotals(invoice);
+        }
+      }
+    }
 
     const updatedExpense = await GuestExpense.findById(id)
       .populate("guest", "firstName lastName")
       .populate("reservation", "reservationNumber")
-      .populate("addedBy", "name");
+      .populate("addedBy", "name")
+      .populate("billedBy", "name");
 
     res.json(updatedExpense);
   } catch (err) {
     console.error("Update failed:", err.message);
-    res.status(500).json({ error: "Failed to update expense" });
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to update expense" });
   }
 };
 
@@ -230,14 +335,25 @@ exports.deleteExpense = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const expense = await GuestExpense.findByIdAndDelete(id);
+    const expense = await GuestExpense.findById(id);
 
     if (!expense) {
       return res.status(404).json({ error: "Expense not found" });
     }
 
+    // If billed to an invoice, remove line item and recalculate
+    if (expense.paymentStatus === "Added to Bill") {
+      await billingService.removeExpenseFromBill({
+        expenseId: id,
+        staffUserId: req.user.id
+      });
+    }
+
+    await GuestExpense.findByIdAndDelete(id);
+
     res.json({ message: "Expense deleted successfully" });
   } catch (err) {
+    console.error("Delete expense error:", err);
     res.status(500).json({ error: "Failed to delete expense" });
   }
 };

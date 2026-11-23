@@ -2,32 +2,25 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const mongoose = require("mongoose");
 const readline = require("readline");
-const fs = require("fs");
 const User = require("../models/User");
 const AdminBootstrapLock = require("../models/AdminBootstrapLock");
-let localMongoServer = null;
+
+function sanitizeUri(uri) {
+  if (!uri) return "";
+  return uri.replace(/\/\/[^:]+:[^@]+@/, "//***:***@");
+}
 
 async function connectToProjectDatabase() {
   const uri = process.env.MONGO_URI ? process.env.MONGO_URI.trim() : "";
-  if (uri) {
-    try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-      return;
-    } catch (error) {
-      console.warn("Configured MongoDB is unavailable; attempting the backend's local persistent database.");
-    }
+  if (!uri) {
+    throw new Error("MONGO_URI environment variable is required to bootstrap a Super Admin on MongoDB Atlas.");
   }
-  if (process.env.USE_IN_MEMORY_DB === "true") {
-    throw new Error("The backend is configured for temporary in-memory data. Configure a persistent database before bootstrapping a Super Admin.");
-  }
-  const dbPath = path.resolve(__dirname, "../.mongo-data");
-  if (!fs.existsSync(dbPath)) fs.mkdirSync(dbPath, { recursive: true });
-  const { MongoMemoryServer } = require("mongodb-memory-server");
   try {
-    localMongoServer = await MongoMemoryServer.create({ instance: { dbPath, storageEngine: "wiredTiger" } });
-    await mongoose.connect(localMongoServer.getUri());
+    console.log(`Connecting to MongoDB Atlas (${sanitizeUri(uri)})...`);
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+    console.log(`Connected to MongoDB Atlas. Active database: ${mongoose.connection.name}`);
   } catch (error) {
-    throw new Error("Could not open the backend's persistent local database. Stop the backend before running this bootstrap and try again.");
+    throw new Error(`Failed to connect to MongoDB Atlas (${error.message}). Cannot bootstrap Super Admin.`);
   }
 }
 
@@ -112,5 +105,4 @@ main()
   })
   .finally(async () => {
     if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-    if (localMongoServer) await localMongoServer.stop();
   });

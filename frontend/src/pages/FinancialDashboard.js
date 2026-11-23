@@ -301,8 +301,8 @@ const FinancialDashboard = () => {
             </span>
             <FaCheckCircle style={{ color: '#059669' }} />
           </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
-            Rs. {Number(totalRevenue).toLocaleString()}
+          <div className="pms-kpi-val" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
+            LKR {Number(totalRevenue).toLocaleString()}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '0.25rem' }}>
             {summary.totalConfirmedCount || 0} successfully verified settlements
@@ -316,8 +316,8 @@ const FinancialDashboard = () => {
             </span>
             <FaMoneyBillWave style={{ color: '#B68C48' }} />
           </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
-            Rs. {Number(netRevenue).toLocaleString()}
+          <div className="pms-kpi-val" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
+            LKR {Number(netRevenue).toLocaleString()}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '0.25rem' }}>
             Gross less authorized refunds
@@ -331,8 +331,8 @@ const FinancialDashboard = () => {
             </span>
             <FaUndo style={{ color: '#DC2626' }} />
           </div>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#991B1B', marginTop: '0.5rem' }}>
-            Rs. {Number(totalRefunds).toLocaleString()}
+          <div className="pms-kpi-val" style={{ fontSize: '1.85rem', fontWeight: 800, color: '#991B1B', marginTop: '0.5rem' }}>
+            LKR {Number(totalRefunds).toLocaleString()}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '0.25rem' }}>
             {summary.totalRefundedCount || 0} refund transactions
@@ -347,10 +347,25 @@ const FinancialDashboard = () => {
             <FaClock style={{ color: '#D97706' }} />
           </div>
           <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
-            Rs. {Number(summary.pendingAmount || 0).toLocaleString()}
+            LKR {Number(summary.pendingAmount || 0).toLocaleString()}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '0.25rem' }}>
             {summary.pendingCount || 0} pending sessions
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', padding: '1.5rem', borderRadius: '0.85rem', border: '1px solid #E2E8F0', borderLeft: '4px solid #4F46E5', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#4F46E5', textTransform: 'uppercase' }}>
+              Total Outstanding Balance
+            </span>
+            <FaFileInvoiceDollar style={{ color: '#4F46E5' }} />
+          </div>
+          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#162E24', marginTop: '0.5rem' }}>
+            LKR {Number(summary.totalOutstandingBalance || 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '0.25rem' }}>
+            {summary.pendingReservationsCount || 0} Pending · {summary.partialReservationsCount || 0} Partial Stays
           </div>
         </div>
       </div>

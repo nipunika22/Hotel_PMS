@@ -16,6 +16,7 @@ const {
   verifyNotificationSignature,
   mapPayHereStatusCode
 } = require("../services/payhereService");
+const paymentService = require("../services/paymentService");
 
 /**
  * Helper: Find authoritative business record and calculate amount
@@ -464,6 +465,12 @@ exports.getPayments = async (req, res) => {
     if (purpose && purpose !== "ALL") {
       filter.purpose = purpose;
     }
+    if (req.query.reservation) {
+      filter.reservation = req.query.reservation;
+    }
+    if (req.query.booking) {
+      filter.booking = req.query.booking;
+    }
     if (startDate || endDate) {
       filter.paymentDate = {};
       if (startDate) filter.paymentDate.$gte = new Date(startDate);
@@ -496,6 +503,7 @@ exports.getPayments = async (req, res) => {
       .populate("eventBooking", "confirmationNumber eventType date venueName customerName")
       .populate("invoice", "invoiceNumber totalAmount balanceDue")
       .populate("refundedBy", "name email")
+      .populate("auditLog.performedBy", "name email role")
       .sort({ paymentDate: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -690,12 +698,56 @@ exports.getFinancialAnalytics = async (req, res) => {
       { $match: confirmedMatch },
       {
         $group: {
-          _id: { $ifNull: ["$gatewayMethod", "$paymentMethod"] },
+          _id: { $ifNull: ["$paymentMethod", "$gatewayMethod"] },
           count: { $sum: 1 },
           revenue: { $sum: "$amount" }
         }
       }
     ]);
+
+    let cashCollections = 0;
+    let cardCollections = 0;
+    let bankTransferCollections = 0;
+    let onlineCollections = 0;
+
+    methodAgg.forEach((m) => {
+      const name = (m._id || "").toLowerCase();
+      if (name.includes("cash")) cashCollections += m.revenue;
+      else if (name.includes("card") || name.includes("visa") || name.includes("master")) cardCollections += m.revenue;
+      else if (name.includes("bank") || name.includes("transfer") || name.includes("cheque")) bankTransferCollections += m.revenue;
+      else onlineCollections += m.revenue;
+    });
+
+    // Outstanding balances from active reservations
+    const reservationMatch = {
+      paymentStatus: { $in: ["Pending", "Partial"] },
+      status: { $nin: ["Cancelled", "No-Show"] }
+    };
+    if (propertyId && propertyId !== "ALL") {
+      reservationMatch.property = new mongoose.Types.ObjectId(propertyId);
+    }
+    const outstandingAgg = await Reservation.aggregate([
+      { $match: reservationMatch },
+      {
+        $group: {
+          _id: "$paymentStatus",
+          count: { $sum: 1 },
+          totalOutstanding: {
+            $sum: { $subtract: ["$totalAmount", { $ifNull: ["$advancePayment", 0] }] }
+          }
+        }
+      }
+    ]);
+
+    let pendingReservationsCount = 0;
+    let partialReservationsCount = 0;
+    let totalOutstandingBalance = 0;
+
+    outstandingAgg.forEach((o) => {
+      if (o._id === "Pending") pendingReservationsCount += o.count;
+      if (o._id === "Partial") partialReservationsCount += o.count;
+      totalOutstandingBalance += Math.max(0, o.totalOutstanding || 0);
+    });
 
     res.json({
       summary: {
@@ -707,7 +759,14 @@ exports.getFinancialAnalytics = async (req, res) => {
         cancelledCount: statusMap.cancelled?.count || 0,
         totalRefundedAmount,
         totalRefundedCount,
-        netRevenue
+        netRevenue,
+        cashCollections,
+        cardCollections,
+        bankTransferCollections,
+        onlineCollections,
+        pendingReservationsCount,
+        partialReservationsCount,
+        totalOutstandingBalance
       },
       revenueByPurpose: purposeAgg,
       revenueByProperty: propertyAgg,
@@ -847,75 +906,81 @@ exports.simulateSandboxPayment = async (req, res) => {
 };
 
 /**
- * 10. CREATE PAYMENT (Backward Compatibility for manual cash/staff entries)
+ * 10. CREATE PAYMENT (Unified manual cash/staff entries & client payments)
  */
 exports.createPayment = async (req, res) => {
-  const { bookingId, amount, paymentMethod, transactionId, notes } = req.body;
+  const {
+    reservationId,
+    bookingId,
+    invoiceId,
+    amount,
+    paymentMethod,
+    transactionId,
+    transactionReference,
+    notes,
+    idempotencyKey,
+    paymentDate
+  } = req.body;
 
-  if (!bookingId || !amount || !paymentMethod) {
-    return res.status(400).json({ error: "Booking ID, amount, and payment method are required" });
+  if (!reservationId && !bookingId && !invoiceId) {
+    return res.status(400).json({ error: "Reservation ID, Booking ID, or Invoice ID is required" });
+  }
+
+  if (!amount || !paymentMethod) {
+    return res.status(400).json({ error: "Amount and payment method are required" });
   }
 
   try {
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
-    }
+    // Authorization check
+    const staffRoles = ["admin", "staff", "finance", "manager", "super_admin"];
+    const isStaff = staffRoles.includes(req.user.role);
 
-    // Verify user authorization
-    if (req.user.role !== "admin" && req.user.role !== "staff" && req.user.role !== "finance" && booking.user.toString() !== req.user.id) {
-      return res.status(403).json({ error: "Not authorized to create payment for this booking" });
-    }
-
-    const targetPropertyId = booking.property || req.propertyId || (await getActivePropertyId());
-
-    const newPayment = new Payment({
-      property: targetPropertyId,
-      booking: bookingId,
-      reservation: booking.reservation,
-      user: booking.user,
-      purpose: "room_booking",
-      amount,
-      currency: "LKR",
-      paymentMethod,
-      transactionId: transactionId || `MANUAL-${Date.now()}`,
-      notes,
-      paymentStatus: "completed",
-      confirmedAt: new Date(),
-      auditLog: [
-        {
-          action: "MANUAL_PAYMENT_RECORDED",
-          performedBy: req.user.id,
-          timestamp: new Date(),
-          notes: notes || "Recorded via internal PMS"
+    if (!isStaff) {
+      // Customer can only pay for their own record
+      if (bookingId) {
+        const booking = await Booking.findById(bookingId).select("user");
+        if (!booking || booking.user.toString() !== req.user.id) {
+          return res.status(403).json({ error: "Not authorized to create payment for this booking" });
         }
-      ]
-    });
-
-    await newPayment.save();
-
-    booking.paymentStatus = "paid";
-    await booking.save();
-
-    if (booking.reservation) {
-      const reservation = await Reservation.findById(booking.reservation);
-      if (reservation) {
-        reservation.paymentStatus = "Paid";
-        reservation.advancePayment = amount;
-        await reservation.save();
+      } else if (reservationId) {
+        const resv = await Reservation.findById(reservationId).populate("guest");
+        const guestUserId = resv?.guest?.user?.toString();
+        const createdById = resv?.createdBy?.toString();
+        if (guestUserId !== req.user.id && createdById !== req.user.id) {
+          return res.status(403).json({ error: "Not authorized to create payment for this reservation" });
+        }
       }
     }
 
-    const payment = await Payment.findById(newPayment._id)
+    const result = await paymentService.recordPayment({
+      reservationId,
+      bookingId,
+      invoiceId,
+      amount,
+      paymentMethod,
+      transactionReference: transactionReference || transactionId,
+      transactionId,
+      notes,
+      receivedBy: req.user.id,
+      idempotencyKey,
+      paymentDate,
+      propertyId: req.propertyId
+    });
+
+    // Populate response consistently for backward compatibility
+    const payment = await Payment.findById(result.payment._id)
       .populate("user", "name email")
       .populate({
         path: "booking",
         populate: { path: "room", select: "roomNumber roomType" }
-      });
+      })
+      .populate("reservation")
+      .populate("auditLog.performedBy", "name email role");
 
-    res.status(201).json(payment);
+    res.status(201).json(payment || result.payment);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create payment" });
+    console.error("createPayment error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to create payment" });
   }
 };
 

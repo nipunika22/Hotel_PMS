@@ -83,6 +83,17 @@ const guestExpenseSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
+  invoice: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Invoice"
+  },
+  billedAt: {
+    type: Date
+  },
+  billedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User"
+  },
   notes: {
     type: String
   },
@@ -99,5 +110,10 @@ guestExpenseSchema.pre("save", function(next) {
   this.totalAmount = this.amount + this.taxAmount;
   next();
 });
+
+// Indexes
+guestExpenseSchema.index({ reservation: 1, paymentStatus: 1 });
+guestExpenseSchema.index({ guest: 1, paymentStatus: 1 });
+guestExpenseSchema.index({ invoice: 1 });
 
 module.exports = mongoose.model("GuestExpense", guestExpenseSchema);

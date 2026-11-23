@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaBed, FaTools, FaTimes, FaBroom, FaShieldAlt, FaEye } from 'react-icons/fa';
-import { roomAPI, maintenanceAPI } from '../services/api';
+import { roomAPI, maintenanceAPI, housekeepingAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import PageHeader from '../components/ui/PageHeader';
@@ -114,6 +114,21 @@ const Rooms = () => {
     }
   };
 
+  const handleCompleteCleaning = async (taskId, roomNumber) => {
+    if (!window.confirm(`Mark cleaning complete for Room #${roomNumber}? Room status will be restored to Available.`)) {
+      return;
+    }
+    try {
+      await housekeepingAPI.completeTask(taskId, {
+        notes: `Completed via Room Management by ${user?.name || 'Staff'}`
+      });
+      toast.success(`Room #${roomNumber} cleaning completed! Room is now Available.`);
+      fetchRooms();
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.error || 'Failed to complete cleaning');
+    }
+  };
+
   const filteredRooms = rooms.filter(room => {
     const matchesSearch = !searchTerm || 
       room.roomNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -204,63 +219,90 @@ const Rooms = () => {
           />
         ) : (
           <div className="room-cards-grid">
-            {filteredRooms.map((room) => (
-              <div key={room._id} className="room-card">
-                <div className="room-card-header">
-                  <div className="room-card-number">#{room.roomNumber}</div>
-                  <StatusBadge status={room.status} />
-                </div>
-                <div className="room-card-type">{room.roomType}</div>
-                <div className="room-card-info">
-                  <span>Floor {room.floor}</span>
-                  <span>{room.bedConfiguration}</span>
-                  {room.capacity && <span>Max {room.capacity.maxOccupancy} guests</span>}
-                </div>
-                {room.cleaningStatus && room.cleaningStatus !== 'Clean' && (
-                  <div style={{ marginBottom: 'var(--space-3)' }}>
-                    <StatusBadge status={room.cleaningStatus} />
+            {filteredRooms.map((room) => {
+              const displayStatus = (room.status === 'Cleaning')
+                ? (room.activeCleaningTask?.status === 'In Progress' ? 'Cleaning In Progress' : 'Cleaning Required')
+                : room.status;
+
+              return (
+                <div key={room._id} className="room-card">
+                  <div className="room-card-header">
+                    <div className="room-card-number">#{room.roomNumber}</div>
+                    <StatusBadge status={displayStatus} />
                   </div>
-                )}
-                <div className="room-card-footer">
-                  <div className="room-card-price">
-                    ₹{room.basePrice?.toLocaleString()}
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 400 }}>/night</span>
+                  <div className="room-card-type">{room.roomType}</div>
+                  <div className="room-card-info">
+                    <span>Floor {room.floor}</span>
+                    <span>{room.bedConfiguration}</span>
+                    {room.capacity && <span>Max {room.capacity.maxOccupancy} guests</span>}
                   </div>
-                  <div className="table-actions">
-                    <button type="button" onClick={() => setDetailRoom(room)} className="btn btn-icon btn-ghost btn-sm" title="View Room Details" aria-label="View room details"><FaEye /></button>
-                    {/* Maintenance Action Button */}
-                    {canManageMaintenance && (
+                  {room.status === 'Cleaning' && room.activeCleaningTask && (
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+                      <span>
+                        {room.activeCleaningTask.status === 'In Progress' ? 'In progress' : 'Awaiting cleaning'}
+                        {room.activeCleaningTask.assignedTo?.name ? ` • ${room.activeCleaningTask.assignedTo.name}` : ''}
+                      </span>
+                    </div>
+                  )}
+                  {room.cleaningStatus && room.cleaningStatus !== 'Clean' && room.status !== 'Cleaning' && (
+                    <div style={{ marginBottom: 'var(--space-3)' }}>
+                      <StatusBadge status={room.cleaningStatus} />
+                    </div>
+                  )}
+                  <div className="room-card-footer">
+                    <div className="room-card-price">
+                      ₹{room.basePrice?.toLocaleString()}
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', fontWeight: 400 }}>/night</span>
+                    </div>
+                    <div className="table-actions">
+                      <button type="button" onClick={() => setDetailRoom(room)} className="btn btn-icon btn-ghost btn-sm" title="View Room Details" aria-label="View room details"><FaEye /></button>
+                      {/* Housekeeping Action Button if Room in Cleaning */}
+                      {room.status === 'Cleaning' && room.activeCleaningTask && (isSupervisor || ['staff', 'housekeeping'].includes(userRole)) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCompleteCleaning(room.activeCleaningTask._id, room.roomNumber)}
+                          className="btn btn-icon btn-ghost btn-sm"
+                          title="Complete Cleaning & Restore Availability"
+                          aria-label="Complete Cleaning"
+                          style={{ color: 'var(--color-success)' }}
+                        >
+                          <FaBroom />
+                        </button>
+                      )}
+                      {/* Maintenance Action Button */}
+                      {canManageMaintenance && (
+                        <button
+                          onClick={() => handleOpenMaintenanceModal(room)}
+                          className="btn btn-icon btn-ghost btn-sm"
+                          title="Report Maintenance Issue / Work Order"
+                          aria-label="Maintenance"
+                          style={{ color: 'var(--color-warning)' }}
+                        >
+                          <FaTools />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleOpenMaintenanceModal(room)}
+                        onClick={() => navigate(`/rooms/${room._id}/edit`)}
                         className="btn btn-icon btn-ghost btn-sm"
-                        title="Report Maintenance Issue / Work Order"
-                        aria-label="Maintenance"
-                        style={{ color: 'var(--color-warning)' }}
+                        title="Edit Room"
+                        aria-label="Edit room"
                       >
-                        <FaTools />
+                        <FaEdit />
                       </button>
-                    )}
-                    <button
-                      onClick={() => navigate(`/rooms/${room._id}/edit`)}
-                      className="btn btn-icon btn-ghost btn-sm"
-                      title="Edit Room"
-                      aria-label="Edit room"
-                    >
-                      <FaEdit />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(room._id)}
-                      className="btn btn-icon btn-ghost btn-sm"
-                      title="Deactivate Room"
-                      aria-label="Deactivate room"
-                      style={{ color: 'var(--color-danger)' }}
-                    >
-                      <FaTrash />
-                    </button>
+                      <button
+                        onClick={() => handleDelete(room._id)}
+                        className="btn btn-icon btn-ghost btn-sm"
+                        title="Deactivate Room"
+                        aria-label="Deactivate room"
+                        style={{ color: 'var(--color-danger)' }}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

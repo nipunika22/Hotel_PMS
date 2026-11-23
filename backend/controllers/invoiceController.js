@@ -266,24 +266,18 @@ exports.addPayment = async (req, res) => {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
-    invoice.payments.push({
-      paymentDate: new Date(),
-      amount,
+    const paymentService = require("../services/paymentService");
+    await paymentService.recordPayment({
+      invoiceId: id,
+      reservationId: invoice.reservation,
+      amount: Number(amount),
       paymentMethod,
       transactionId,
-      notes
+      transactionReference: transactionId,
+      notes,
+      receivedBy: req.user.id,
+      propertyId: invoice.property || req.propertyId
     });
-
-    invoice.totalPaid += amount;
-    invoice.balanceDue = invoice.totalAmount - invoice.totalPaid;
-
-    if (invoice.balanceDue <= 0) {
-      invoice.paymentStatus = "Paid";
-    } else if (invoice.totalPaid > 0) {
-      invoice.paymentStatus = "Partial";
-    }
-
-    await invoice.save();
 
     const updatedInvoice = await Invoice.findById(id)
       .populate("guest")
@@ -317,7 +311,8 @@ exports.addPayment = async (req, res) => {
 
     res.json(updatedInvoice);
   } catch (err) {
-    res.status(500).json({ error: "Failed to add payment" });
+    console.error("addPayment error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message || "Failed to add payment" });
   }
 };
 

@@ -71,7 +71,8 @@ const HousekeepingEnhanced = () => {
     try {
       if (isHousekeeper) {
         const res = await housekeepingAPI.getMyTasks();
-        setTasks(res.data.tasks || []);
+        const taskList = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
+        setTasks(taskList);
       } else {
         const [tasksRes, roomsRes, staffRes] = await Promise.all([
           housekeepingAPI.getTasks({
@@ -81,9 +82,12 @@ const HousekeepingEnhanced = () => {
           roomAPI.getRooms(),
           housekeepingAPI.getStaff()
         ]);
-        setTasks(tasksRes.data.tasks || []);
-        setRooms(roomsRes.data || []);
-        setStaffList(staffRes.data.staff || []);
+        const taskList = Array.isArray(tasksRes.data) ? tasksRes.data : (tasksRes.data?.tasks || []);
+        const roomList = Array.isArray(roomsRes.data) ? roomsRes.data : (roomsRes.data?.rooms || []);
+        const staffArr = Array.isArray(staffRes.data) ? staffRes.data : (staffRes.data?.staff || []);
+        setTasks(taskList);
+        setRooms(roomList);
+        setStaffList(staffArr);
       }
     } catch (err) {
       toast.error('Failed to load housekeeping data');
@@ -133,7 +137,7 @@ const HousekeepingEnhanced = () => {
         }];
       }
       await housekeepingAPI.completeTask(selectedTask._id, payload);
-      toast.success('Cleaning completed and submitted for inspection');
+      toast.success('Room cleaning completed! Room status restored to Available.');
       setShowCompleteModal(false);
       setSelectedTask(null);
       fetchData();
@@ -436,8 +440,14 @@ const HousekeepingEnhanced = () => {
                         <td>
                           <strong>{task.taskType}</strong>
                           {task.reservation && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Checkout Task
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              <span>#{task.reservation.reservationNumber || 'Checkout'}</span>
+                              {task.reservation.guest && (
+                                <span> • {task.reservation.guest.firstName || ''} {task.reservation.guest.lastName || ''}</span>
+                              )}
+                              {task.reservation.actualCheckOutDate && (
+                                <div>Out: {new Date(task.reservation.actualCheckOutDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                              )}
                             </div>
                           )}
                         </td>
@@ -472,6 +482,9 @@ const HousekeepingEnhanced = () => {
                           {task.completedAt && (
                             <div>Completed: {new Date(task.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                           )}
+                          {task.inspectedAt && (
+                            <div>Inspected: {new Date(task.inspectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          )}
                         </td>
                         <td style={{ fontSize: '0.85rem', maxWidth: '180px' }}>
                           {task.notes && <div>{task.notes}</div>}
@@ -503,9 +516,21 @@ const HousekeepingEnhanced = () => {
                               <button 
                                 className="btn btn-sm btn-success"
                                 onClick={() => handleOpenCompleteModal(task)}
-                                title="Complete Cleaning"
+                                title="Complete Cleaning & Restore Availability"
                               >
                                 <FaCheck /> Complete
+                              </button>
+                            )}
+
+                            {/* Direct complete for admin/manager or staff if needed */}
+                            {canManage && ['Pending', 'Assigned'].includes(task.status) && (
+                              <button 
+                                className="btn btn-sm btn-outline"
+                                onClick={() => handleOpenCompleteModal(task)}
+                                title="Complete Cleaning Directly"
+                                style={{ marginLeft: '4px' }}
+                              >
+                                <FaCheck /> Quick Complete
                               </button>
                             )}
 
@@ -541,7 +566,7 @@ const HousekeepingEnhanced = () => {
                   <FaCheck style={{ color: 'var(--color-success)' }} /> Complete Room Cleaning
                 </h3>
                 <p className="modal-description">
-                  Room #{selectedTask.room?.roomNumber} — Mark cleaning complete and record any items found.
+                  Room #{selectedTask.room?.roomNumber} — Mark cleaning complete. Room status will be restored to Available for new guest bookings.
                 </p>
               </div>
               <button className="modal-close" onClick={() => setShowCompleteModal(false)} aria-label="Close">

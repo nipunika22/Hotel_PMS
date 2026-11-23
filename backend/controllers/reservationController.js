@@ -100,7 +100,15 @@ exports.getReservation = async (req, res) => {
       return res.status(404).json({ error: "Reservation not found" });
     }
 
-    res.json(reservation);
+    const resObj = reservation.toObject();
+    const Booking = require("../models/Booking");
+    const linkedBooking = await Booking.findOne({ reservation: reservation._id }).select("_id").lean();
+    if (linkedBooking) {
+      resObj.booking = linkedBooking._id;
+      resObj.bookingId = linkedBooking._id;
+    }
+
+    res.json(resObj);
   } catch (err) {
     res.status(500).json({ error: "Failed to load reservation" });
   }
@@ -660,28 +668,51 @@ exports.getDashboardStats = async (req, res) => {
       status: "Confirmed"
     });
 
-    const revenueToday = await Reservation.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: today, $lt: tomorrow }
-        }
-      },
+    const Payment = require("../models/Payment");
+    const paymentMatch = buildPropertyFilter(req, {
+      paymentDate: { $gte: today, $lt: tomorrow },
+      paymentStatus: { $in: ["completed", "partially_refunded", "refunded"] }
+    });
+
+    const revenueTodayAgg = await Payment.aggregate([
+      { $match: paymentMatch },
       {
         $group: {
           _id: null,
-          total: { $sum: "$totalAmount" }
+          total: {
+            $sum: {
+              $subtract: [
+                "$amount",
+                { $ifNull: ["$refundAmount", 0] }
+              ]
+            }
+          }
         }
       }
     ]);
+
+    const revenueToday = Math.max(0, revenueTodayAgg[0]?.total || 0);
 
     res.json({
       checkingInToday,
       checkingOutToday,
       currentOccupancy,
       confirmedReservations,
-      revenueToday: revenueToday[0]?.total || 0
+      revenueToday
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to load dashboard statistics" });
+  }
+};
+
+// Get payments for a specific reservation
+exports.getReservationPayments = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const paymentService = require("../services/paymentService");
+    const payments = await paymentService.getReservationPayments(id);
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load reservation payments" });
   }
 };

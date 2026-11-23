@@ -108,6 +108,11 @@ const reservationSchema = new mongoose.Schema({
     enum: ["Pending", "Partial", "Paid", "Refunded"],
     default: "Pending"
   },
+  paymentMethod: {
+    type: String,
+    enum: ["Cash", "Card", "Online", "PayHere", "Bank Transfer", "Unspecified"],
+    default: "Unspecified"
+  },
   mealPlan: {
     type: String,
     enum: ["None", "Breakfast", "Half Board", "Full Board", "All Inclusive"],
@@ -156,8 +161,8 @@ const reservationSchema = new mongoose.Schema({
   }
 });
 
-// Generate reservation number before saving if not already set
-reservationSchema.pre("save", async function(next) {
+// Generate reservation number before validation if not already set
+reservationSchema.pre("validate", async function(next) {
   if (this.isNew && !this.reservationNumber) {
     const session = typeof this.$session === "function" ? this.$session() : null;
     const date = new Date();

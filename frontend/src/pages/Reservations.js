@@ -1,7 +1,7 @@
 // frontend/src/pages/Reservations.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPlus, FaEye, FaCheck, FaTimes, FaSearch, FaCalendarAlt } from 'react-icons/fa';
+import { FaPlus, FaEye, FaCheck, FaTimes, FaSearch, FaCalendarAlt, FaMoneyBillWave } from 'react-icons/fa';
 import { reservationAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
@@ -198,8 +198,15 @@ const Reservations = () => {
                       <td>{reservation.numberOfGuests ?? ((reservation.numberOfAdults || 0) + (reservation.numberOfChildren || 0))}</td>
                       <td><StatusBadge status={reservation.bookingSource} /></td>
                       <td><StatusBadge status={reservation.status} /></td>
-                      <td><StatusBadge status={reservation.paymentStatus || 'Unavailable'} /></td>
-                      <td><strong>₹{reservation.totalAmount?.toLocaleString()}</strong></td>
+                      <td>
+                        <StatusBadge status={reservation.paymentStatus || 'Unavailable'} />
+                        {reservation.paymentMethod && reservation.paymentMethod !== 'Unspecified' && (
+                          <div className="table-cell-sub" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>
+                            {reservation.paymentMethod}
+                          </div>
+                        )}
+                      </td>
+                      <td><strong>LKR {reservation.totalAmount?.toLocaleString()}</strong></td>
                       <td>
                         <div className="table-actions">
                           <button
@@ -210,6 +217,17 @@ const Reservations = () => {
                           >
                             <FaEye />
                           </button>
+                          {reservation.paymentStatus !== 'Paid' && (
+                            <button
+                              onClick={() => navigate(`/reservations/${reservation._id}`)}
+                              className="btn btn-icon btn-sm btn-outline"
+                              title="Record Payment"
+                              aria-label="Record Payment"
+                              style={{ color: '#16a34a' }}
+                            >
+                              <FaMoneyBillWave />
+                            </button>
+                          )}
                           {reservation.status === 'Confirmed' && (
                             <button
                               onClick={() => handleCheckIn(reservation._id)}

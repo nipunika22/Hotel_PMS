@@ -7,6 +7,7 @@ const HotelChain = require("../models/HotelChain");
 const Room = require("../models/Room");
 const Reservation = require("../models/Reservation");
 const Booking = require("../models/Booking");
+const Payment = require("../models/Payment");
 const AdminAuditLog = require("../models/AdminAuditLog");
 const Attendance = require("../models/Attendance");
 const Restaurant = require("../models/Restaurant");
@@ -744,13 +745,53 @@ exports.getReports = async (req, res) => {
     }
     customerTrendPipeline.push({ $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } });
     const propertyStatusMatch = propertyObjectId ? { _id: propertyObjectId } : {};
-    const [reservationTrends, customerTrends, propertyStatus, roomStatus] = await Promise.all([
+    const paymentMatch = {
+      paymentStatus: { $in: ["completed", "partially_refunded", "refunded"] }
+    };
+    if (propertyObjectId) {
+      paymentMatch.property = propertyObjectId;
+    }
+    if (dateRange.filter) {
+      paymentMatch.paymentDate = dateRange.filter;
+    }
+
+    const [reservationTrends, customerTrends, propertyStatus, roomStatus, revenueAgg] = await Promise.all([
       Reservation.aggregate([{ $match: match }, { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
       User.aggregate(customerTrendPipeline),
       Property.aggregate([{ $match: propertyStatusMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
-      Room.aggregate([{ $match: propertyObjectId ? { property: propertyObjectId } : {} }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { _id: 1 } }])
+      Room.aggregate([{ $match: propertyObjectId ? { property: propertyObjectId } : {} }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
+      Payment.aggregate([
+        { $match: paymentMatch },
+        {
+          $group: {
+            _id: null,
+            grossRevenue: { $sum: "$amount" },
+            refunds: { $sum: { $ifNull: ["$refundAmount", 0] } },
+            count: { $sum: 1 }
+          }
+        }
+      ])
     ]);
-    res.json({ filters: { from: req.query.from || null, to: req.query.to || null, propertyId: req.query.propertyId || null }, reservationTrends, customerRegistrationTrends: customerTrends, propertiesByStatus: propertyStatus, roomsByOperationalStatus: roomStatus, revenue: { available: false, reason: "Payment, invoice, and reservation records do not share a verified reconciliation rule." } });
+
+    const gross = revenueAgg[0]?.grossRevenue || 0;
+    const refunds = revenueAgg[0]?.refunds || 0;
+    const netRevenue = Math.max(0, gross - refunds);
+
+    res.json({
+      filters: { from: req.query.from || null, to: req.query.to || null, propertyId: req.query.propertyId || null },
+      reservationTrends,
+      customerRegistrationTrends: customerTrends,
+      propertiesByStatus: propertyStatus,
+      roomsByOperationalStatus: roomStatus,
+      revenue: {
+        available: true,
+        source: "canonical_payment_ledger",
+        grossRevenue: gross,
+        refunds,
+        netRevenue,
+        transactionCount: revenueAgg[0]?.count || 0
+      }
+    });
   } catch (error) { return sendValidationError(res, error); }
 };
 

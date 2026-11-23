@@ -260,10 +260,10 @@ test("Step 4: Housekeeping & Room Status Automation Suite", async (t) => {
     assert.ok(res.data.completedAt, "completedAt must be populated");
     assert.strictEqual(res.data.lostItems.length, 1);
 
-    // Verify room is Clean, but still in Cleaning status (awaiting inspection)
+    // Verify room is Clean and status is restored to Available upon cleaning completion
     const room = await Room.findById(testRoom._id);
     assert.strictEqual(room.cleaningStatus, "Clean", "Room cleaningStatus is now Clean");
-    assert.strictEqual(room.status, "Cleaning", "Room status must remain Cleaning until supervisor inspection");
+    assert.strictEqual(room.status, "Available", "Room status must transition to Available upon cleaning completion");
   });
 
   // 7. Supervisor can inspect completed task

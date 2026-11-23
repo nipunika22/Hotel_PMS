@@ -44,10 +44,22 @@ const invoiceSchema = new mongoose.Schema({
     required: true
   },
   extraExpenses: [{
+    expense: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GuestExpense"
+    },
+    expenseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GuestExpense"
+    },
     category: String,
     description: String,
     date: Date,
-    amount: Number
+    amount: Number,
+    quantity: { type: Number, default: 1 },
+    unitPrice: Number,
+    taxPercentage: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 }
   }],
   totalExtraExpenses: {
     type: Number,
@@ -142,7 +154,7 @@ const invoiceSchema = new mongoose.Schema({
 
 // Generate invoice number before saving
 invoiceSchema.pre("save", async function(next) {
-  if (this.isNew) {
+  if (this.isNew && !this.invoiceNumber) {
     const count = await mongoose.model("Invoice").countDocuments();
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);

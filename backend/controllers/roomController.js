@@ -12,8 +12,31 @@ exports.getRooms = async (req, res) => {
     const filter = buildPropertyFilter(req, { isActive: true });
     const rooms = await Room.find(filter)
       .populate("currentReservation", "reservationNumber guest")
-      .sort({ roomNumber: 1 });
-    res.json(rooms);
+      .sort({ roomNumber: 1 })
+      .lean();
+
+    // Attach active housekeeping tasks if any
+    const HousekeepingTask = require("../models/HousekeepingTask");
+    const activeTasks = await HousekeepingTask.find({
+      status: { $in: ["Pending", "Assigned", "In Progress", "Needs Recleaning", "Completed"] }
+    })
+      .populate("assignedTo", "name email role phone")
+      .lean();
+
+    const taskByRoomId = new Map();
+    for (const t of activeTasks) {
+      if (t.room) taskByRoomId.set(t.room.toString(), t);
+    }
+
+    const enrichedRooms = rooms.map(room => {
+      const activeTask = taskByRoomId.get(room._id.toString()) || null;
+      return {
+        ...room,
+        activeCleaningTask: activeTask
+      };
+    });
+
+    res.json(enrichedRooms);
   } catch (err) {
     res.status(500).json({ error: "Failed to load rooms" });
   }
@@ -213,6 +236,29 @@ exports.updateRoomStatus = async (req, res) => {
     if (status === "Maintenance" || status === "Out of Order") {
       const { assertRoomBlockable } = require("../services/maintenanceService");
       await assertRoomBlockable(id);
+    }
+
+    if (status === "Available") {
+      const checkedInStay = await Reservation.findOne({
+        room: id,
+        status: "Checked-In"
+      });
+      if (checkedInStay) {
+        const err = new Error("Cannot set room to Available while an active Checked-In reservation exists");
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const HousekeepingTask = require("../models/HousekeepingTask");
+      const activeCleaningTask = await HousekeepingTask.findOne({
+        room: id,
+        status: { $in: ["Pending", "Assigned", "In Progress", "Needs Recleaning"] }
+      });
+      if (activeCleaningTask && cleaningStatus !== "Clean") {
+        const err = new Error("Cannot set room to Available while a housekeeping cleaning task is pending or in progress. Please complete cleaning through the Housekeeping module.");
+        err.statusCode = 409;
+        throw err;
+      }
     }
 
     const updates = {};

@@ -35,6 +35,11 @@ exports.getTasks = async (req, res) => {
       .populate("assignedTo", "name email role phone")
       .populate("inspectedBy", "name email role")
       .populate("createdBy", "name email")
+      .populate({
+        path: "reservation",
+        select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
+        populate: { path: "guest", select: "firstName lastName name phone" }
+      })
       .sort({ createdAt: -1 });
 
     res.json(tasks);
@@ -52,6 +57,11 @@ exports.getMyTasks = async (req, res) => {
       .populate("room", "roomNumber roomType floor status cleaningStatus")
       .populate("assignedTo", "name email role phone")
       .populate("inspectedBy", "name email role")
+      .populate({
+        path: "reservation",
+        select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
+        populate: { path: "guest", select: "firstName lastName name phone" }
+      })
       .sort({ priority: -1, createdAt: -1 });
 
     res.json(tasks);
@@ -105,7 +115,12 @@ exports.createTask = async (req, res) => {
     const populated = await HousekeepingTask.findById(task._id)
       .populate("room", "roomNumber roomType floor status cleaningStatus")
       .populate("assignedTo", "name email role phone")
-      .populate("createdBy", "name email");
+      .populate("createdBy", "name email")
+      .populate({
+        path: "reservation",
+        select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
+        populate: { path: "guest", select: "firstName lastName name phone" }
+      });
 
     // Notify assigned staff
     if (assignedTo) {
@@ -184,7 +199,7 @@ exports.completeTask = async (req, res) => {
         audience: "department",
         department: "Front Desk",
         title: "Room Cleaning Completed",
-        message: `Housekeeping completed for Room ${updated.room?.roomNumber || ""}. Ready for inspection.`,
+        message: `Housekeeping completed for Room ${updated.room?.roomNumber || ""}. Room is now Available.`,
         category: "housekeeping",
         priority: "normal",
         actionUrl: "/housekeeping",

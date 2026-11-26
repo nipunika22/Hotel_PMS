@@ -3,13 +3,24 @@ const mongoose = require("mongoose");
 const EventVenue = require("../models/EventVenue");
 const Event = require("../models/Event");
 const EventBooking = require("../models/EventBooking");
+const Payment = require("../models/Payment");
 const {
   withVenueLock,
+  withVenueScheduleTransaction,
   checkVenueConflict,
   isDateInFutureOrToday,
   sendEventNotification
 } = require("../services/eventService");
 const { buildPropertyFilter } = require("../middleware/propertyContext");
+
+const isValidISODate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+const isValidTimeRange = (startTime, endTime) =>
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime || "") &&
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(endTime || "") && endTime > startTime;
 
 // =============================================================================
 // PUBLIC / GUEST ENDPOINTS
@@ -153,8 +164,8 @@ exports.getVenueByIdOrSlug = async (req, res) => {
     const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
 
     const query = isObjectId
-      ? buildPropertyFilter(req, { _id: idOrSlug })
-      : buildPropertyFilter(req, { slug: idOrSlug });
+      ? buildPropertyFilter(req, { _id: idOrSlug, isActive: true })
+      : buildPropertyFilter(req, { slug: idOrSlug, isActive: true });
 
     const venue = await EventVenue.findOne(query);
     if (!venue) {
@@ -180,18 +191,30 @@ exports.checkAvailability = async (req, res) => {
       return res.status(400).json({ error: "Date, startTime, and endTime are required" });
     }
 
+    if (!isValidISODate(date) || !isValidTimeRange(startTime, endTime)) {
+      return res.status(400).json({ error: "A valid date and time range are required" });
+    }
+
     if (!isDateInFutureOrToday(date)) {
       return res.status(400).json({ error: "Requested date must be today or in the future" });
     }
 
     let resolvedVenueId = venueId;
     if (!resolvedVenueId && venueSlug) {
-      const venueObj = await EventVenue.findOne(buildPropertyFilter(req, { slug: venueSlug }));
+      const venueObj = await EventVenue.findOne(buildPropertyFilter(req, { slug: venueSlug, isActive: true }));
       if (venueObj) resolvedVenueId = venueObj._id;
     }
 
     if (!resolvedVenueId) {
       return res.status(400).json({ error: "Venue specification required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(resolvedVenueId)) {
+      return res.status(400).json({ error: "Valid venue specification required" });
+    }
+    const activeVenue = await EventVenue.findOne(buildPropertyFilter(req, { _id: resolvedVenueId, isActive: true }));
+    if (!activeVenue) {
+      return res.status(404).json({ error: "Venue not found or inactive for this property" });
     }
 
     const conflictResult = await checkVenueConflict({
@@ -252,7 +275,9 @@ exports.createBooking = async (req, res) => {
       equipment,
       equipmentRequirements,
       notes,
-      specialRequests
+      specialRequests,
+      selectedServices,
+      additionalServices
     } = req.body;
 
     const effectiveName = (customerName || name || "").trim();
@@ -278,60 +303,89 @@ exports.createBooking = async (req, res) => {
     if (!effectiveCategory) {
       return res.status(400).json({ error: "Event category is required" });
     }
-    if (!effectiveDate) {
-      return res.status(400).json({ error: "Event date is required" });
+    if (!effectiveDate || !isValidISODate(effectiveDate)) {
+      return res.status(400).json({ error: "A valid event date is required" });
     }
     if (!isDateInFutureOrToday(effectiveDate)) {
       return res.status(400).json({ error: "Event date must be today or a future date" });
     }
-    if (!effectiveStart || !effectiveEnd) {
-      return res.status(400).json({ error: "Start and end times are required" });
-    }
-    if (effectiveEnd <= effectiveStart) {
-      return res.status(400).json({ error: "End time must be strictly after start time" });
+    if (!isValidTimeRange(effectiveStart, effectiveEnd)) {
+      return res.status(400).json({ error: "Valid start and end times are required; end time must be later" });
     }
     if (isNaN(effectiveGuests) || effectiveGuests < 1) {
       return res.status(400).json({ error: "Estimated guest count must be at least 1" });
     }
+    if (!effectiveVenueRef) {
+      return res.status(400).json({ error: "An event venue is required" });
+    }
 
     // Resolve venue if provided
     let resolvedVenue = null;
-    if (effectiveVenueRef) {
-      const isObjectId = mongoose.Types.ObjectId.isValid(effectiveVenueRef);
-      const venueQuery = isObjectId
-        ? buildPropertyFilter(req, { _id: effectiveVenueRef })
-        : buildPropertyFilter(req, { slug: effectiveVenueRef });
+    const isObjectId = mongoose.Types.ObjectId.isValid(effectiveVenueRef);
+    const venueQuery = isObjectId
+      ? buildPropertyFilter(req, { _id: effectiveVenueRef })
+      : buildPropertyFilter(req, { slug: effectiveVenueRef });
 
-      resolvedVenue = await EventVenue.findOne(venueQuery);
-
-      if (resolvedVenue) {
-        if (!resolvedVenue.isActive) {
-          return res.status(400).json({
-            error: `Selected venue (${resolvedVenue.name}) is currently inactive and cannot accept bookings.`
-          });
-        }
-        if (effectiveGuests < resolvedVenue.min) {
-          return res.status(400).json({
-            error: `Guest count (${effectiveGuests}) is below venue minimum capacity (${resolvedVenue.min})`
-          });
-        }
-        if (effectiveGuests > resolvedVenue.max) {
-          return res.status(400).json({
-            error: `Guest count (${effectiveGuests}) exceeds venue maximum capacity (${resolvedVenue.max})`
-          });
-        }
-      }
+    resolvedVenue = await EventVenue.findOne(venueQuery);
+    if (!resolvedVenue) {
+      return res.status(404).json({ error: "Selected event venue was not found in this property" });
+    }
+    if (!resolvedVenue.isActive) {
+      return res.status(400).json({
+        error: `Selected venue (${resolvedVenue.name}) is currently inactive and cannot accept bookings.`
+      });
+    }
+    if (effectiveGuests < resolvedVenue.min) {
+      return res.status(400).json({
+        error: `Guest count (${effectiveGuests}) is below venue minimum capacity (${resolvedVenue.min})`
+      });
+    }
+    if (effectiveGuests > resolvedVenue.max) {
+      return res.status(400).json({
+        error: `Guest count (${effectiveGuests}) exceeds venue maximum capacity (${resolvedVenue.max})`
+      });
     }
 
-    // Price estimate calculation if package chosen
-    let estimatedPrice = 0;
+    // Server-side price snapshot: fixed package replaces the venue base price;
+    // otherwise the venue base price is used. Additional active services are additive.
     const finalPackageName = selectedPackageName || selectedPackage || "";
-    if (resolvedVenue && finalPackageName && resolvedVenue.packages) {
-      const foundPkg = resolvedVenue.packages.find((p) => p.name === finalPackageName);
-      if (foundPkg && foundPkg.price) {
-        estimatedPrice = foundPkg.price;
+    let selectedPackageRecord = null;
+    if (finalPackageName) {
+      selectedPackageRecord = (resolvedVenue.packages || []).find(
+        (pkg) => pkg.name === finalPackageName && pkg.isActive !== false
+      );
+      if (!selectedPackageRecord) {
+        return res.status(400).json({ error: "Selected package does not belong to this venue or is unavailable" });
       }
     }
+    const requestedServiceNames = Array.isArray(selectedServices)
+      ? selectedServices
+      : (Array.isArray(additionalServices) ? additionalServices : []);
+    const activeAdditionalServices = resolvedVenue.additionalServices || [];
+    const selectedServiceRecords = [];
+    for (const name of requestedServiceNames) {
+      const service = activeAdditionalServices.find((item) => item.name === name && item.isActive !== false);
+      if (!service) {
+        return res.status(400).json({ error: `Selected additional service "${name}" is unavailable for this venue` });
+      }
+      if (!selectedServiceRecords.some((existing) => existing.name === service.name)) {
+        selectedServiceRecords.push(service);
+      }
+    }
+
+    const venueBasePrice = Number(resolvedVenue.basePrice) || 0;
+    const packagePrice = selectedPackageRecord ? (Number(selectedPackageRecord.price) || 0) : 0;
+    const basePriceSnapshot = selectedPackageRecord ? 0 : venueBasePrice;
+    const packagePriceSnapshot = selectedPackageRecord ? packagePrice : 0;
+    const additionalServiceTotal = selectedServiceRecords.reduce(
+      (sum, service) => sum + (Number(service.price) || 0),
+      0
+    );
+    const estimatedPrice = basePriceSnapshot + packagePriceSnapshot + additionalServiceTotal;
+    const currency = selectedPackageRecord?.currency
+      || selectedServiceRecords.find((service) => service.currency)?.currency
+      || resolvedVenue.currency
+      || "LKR";
 
     const bookingData = {
       property: req.propertyId,
@@ -353,6 +407,13 @@ exports.createBooking = async (req, res) => {
       specialRequests: specialRequests || notes || "",
       status: "PENDING",
       estimatedPrice,
+      basePriceSnapshot,
+      packagePriceSnapshot,
+      additionalServiceNames: selectedServiceRecords.map((service) => service.name),
+      additionalServiceTotal,
+      currency,
+      paymentStatus: "UNPAID",
+      paidAmount: 0,
       user: req.user ? req.user._id : undefined,
       auditLog: [
         {
@@ -363,8 +424,26 @@ exports.createBooking = async (req, res) => {
         }
       ]
     };
-
-    const newBooking = await EventBooking.create(bookingData);
+    let newBooking;
+    await withVenueLock(resolvedVenue._id, async () => {
+      const conflict = await checkVenueConflict({
+        propertyId: req.propertyId,
+        venueId: resolvedVenue._id,
+        date: effectiveDate,
+        startTime: effectiveStart,
+        endTime: effectiveEnd
+      });
+      if (conflict.hasConflict) {
+        const err = new Error("Venue is unavailable for the selected date and time");
+        err.statusCode = 409;
+        err.conflict = conflict.conflictingBooking;
+        throw err;
+      }
+      newBooking = await EventBooking.create(bookingData);
+    }).catch((err) => {
+      err.createBookingConflict = true;
+      throw err;
+    });
 
     // Send confirmation notification safely
     await sendEventNotification({
@@ -379,6 +458,12 @@ exports.createBooking = async (req, res) => {
     });
   } catch (err) {
     console.error("createBooking error:", err);
+    if (err.statusCode === 409) {
+      return res.status(409).json({
+        error: err.message,
+        conflictingBooking: err.conflict
+      });
+    }
     res.status(500).json({ error: "Failed to submit event request" });
   }
 };
@@ -429,8 +514,36 @@ exports.getMyBookings = async (req, res) => {
     const bookings = await EventBooking.find(filter)
       .populate("venue", "name slug location type image")
       .sort({ createdAt: -1 });
-
-    res.json(bookings);
+    const bookingIds = bookings.map((booking) => booking._id);
+    const payments = await Payment.find({
+      property: req.propertyId,
+      eventBooking: { $in: bookingIds },
+      paymentStatus: { $in: ["pending", "processing", "completed", "failed", "cancelled"] }
+    }).sort({ createdAt: -1 }).lean();
+    const byBooking = new Map();
+    payments.forEach((payment) => {
+      const key = String(payment.eventBooking);
+      if (!byBooking.has(key)) byBooking.set(key, []);
+      byBooking.get(key).push(payment);
+    });
+    const enriched = bookings.map((booking) => {
+      const related = byBooking.get(String(booking._id)) || [];
+      const completed = related.filter((payment) => payment.paymentStatus === "completed");
+      const paidAmount = completed.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+      const outstandingBalance = Math.max(0, (Number(booking.estimatedPrice) || 0) - paidAmount);
+      let paymentStatus = "UNPAID";
+      if (completed.length && paidAmount >= (Number(booking.estimatedPrice) || 0) && booking.estimatedPrice > 0) paymentStatus = "PAID";
+      else if (completed.length) paymentStatus = "PARTIALLY_PAID";
+      else if (related.some((payment) => payment.paymentStatus === "pending" || payment.paymentStatus === "processing")) paymentStatus = "PENDING";
+      else if (related.some((payment) => payment.paymentStatus === "failed")) paymentStatus = "FAILED";
+      return {
+        ...booking.toObject(),
+        paymentStatus,
+        paidAmount,
+        outstandingBalance
+      };
+    });
+    res.json(enriched);
   } catch (err) {
     console.error("getMyBookings error:", err);
     res.status(500).json({ error: "Failed to fetch your bookings" });
@@ -497,6 +610,11 @@ exports.getEventBySlug = async (req, res) => {
 
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
+    }
+    if (req.body.venue !== undefined && req.body.venue) {
+      if (!mongoose.Types.ObjectId.isValid(req.body.venue) || !await EventVenue.exists(buildPropertyFilter(req, { _id: req.body.venue }))) {
+        return res.status(400).json({ error: "Selected venue does not belong to this property" });
+      }
     }
 
     res.json(event);
@@ -633,6 +751,11 @@ exports.createEvent = async (req, res) => {
     const existing = await Event.findOne(buildPropertyFilter(req, { slug }));
     if (existing) {
       slug = `${slug}-${Math.floor(100 + Math.random() * 900)}`;
+    }
+    if (venue) {
+      if (!mongoose.Types.ObjectId.isValid(venue) || !await EventVenue.exists(buildPropertyFilter(req, { _id: venue }))) {
+        return res.status(400).json({ error: "Selected venue does not belong to this property" });
+      }
     }
 
     const event = await Event.create({
@@ -838,6 +961,10 @@ exports.createVenue = async (req, res) => {
       gallery,
       description,
       packages,
+      basePrice,
+      currency,
+      termsAndConditions,
+      additionalServices,
       isActive
     } = req.body;
 
@@ -846,6 +973,21 @@ exports.createVenue = async (req, res) => {
     }
     if (min && max && Number(min) > Number(max)) {
       return res.status(400).json({ error: "Minimum capacity cannot exceed maximum capacity" });
+    }
+    if (basePrice !== undefined && (!Number.isFinite(Number(basePrice)) || Number(basePrice) < 0)) {
+      return res.status(400).json({ error: "Base venue price cannot be negative" });
+    }
+    if (Array.isArray(packages)) {
+      for (const pkg of packages) {
+        if (!pkg.name || !String(pkg.name).trim()) return res.status(400).json({ error: "Package name is required" });
+        if (!Number.isFinite(Number(pkg.price)) || Number(pkg.price) < 0) return res.status(400).json({ error: "Package prices cannot be negative" });
+      }
+    }
+    if (Array.isArray(additionalServices)) {
+      for (const service of additionalServices) {
+        if (!service.name || !String(service.name).trim()) return res.status(400).json({ error: "Additional service name is required" });
+        if (!Number.isFinite(Number(service.price)) || Number(service.price) < 0) return res.status(400).json({ error: "Additional service prices cannot be negative" });
+      }
     }
 
     let slug = (req.body.slug || name)
@@ -875,6 +1017,10 @@ exports.createVenue = async (req, res) => {
       gallery: gallery || [],
       description: description || "",
       packages: packages || [],
+      basePrice: Number(basePrice) || 0,
+      currency: currency || "LKR",
+      termsAndConditions: termsAndConditions || "",
+      additionalServices: Array.isArray(additionalServices) ? additionalServices : [],
       isActive: isActive !== undefined ? isActive : true
     });
 
@@ -903,6 +1049,21 @@ exports.updateVenue = async (req, res) => {
     if (effectiveMin > effectiveMax) {
       return res.status(400).json({ error: "Minimum capacity cannot exceed maximum capacity" });
     }
+    if (req.body.basePrice !== undefined && (!Number.isFinite(Number(req.body.basePrice)) || Number(req.body.basePrice) < 0)) {
+      return res.status(400).json({ error: "Base venue price cannot be negative" });
+    }
+    if (Array.isArray(req.body.packages)) {
+      for (const pkg of req.body.packages) {
+        if (!pkg.name || !String(pkg.name).trim()) return res.status(400).json({ error: "Package name is required" });
+        if (!Number.isFinite(Number(pkg.price)) || Number(pkg.price) < 0) return res.status(400).json({ error: "Package prices cannot be negative" });
+      }
+    }
+    if (Array.isArray(req.body.additionalServices)) {
+      for (const service of req.body.additionalServices) {
+        if (!service.name || !String(service.name).trim()) return res.status(400).json({ error: "Additional service name is required" });
+        if (!Number.isFinite(Number(service.price)) || Number(service.price) < 0) return res.status(400).json({ error: "Additional service prices cannot be negative" });
+      }
+    }
 
     const allowedFields = [
       "name",
@@ -919,6 +1080,10 @@ exports.updateVenue = async (req, res) => {
       "gallery",
       "description",
       "packages",
+      "basePrice",
+      "currency",
+      "termsAndConditions",
+      "additionalServices",
       "isActive"
     ];
 
@@ -978,6 +1143,14 @@ exports.getAdminBookings = async (req, res) => {
     }
     if (req.query.date) {
       filter.date = req.query.date;
+    } else if (req.query.dateFrom || req.query.dateTo) {
+      const { dateFrom, dateTo } = req.query;
+      if ((dateFrom && !isValidISODate(dateFrom)) || (dateTo && !isValidISODate(dateTo)) || (dateFrom && dateTo && dateFrom > dateTo)) {
+        return res.status(400).json({ error: "Invalid booking date range" });
+      }
+      filter.date = {};
+      if (dateFrom) filter.date.$gte = dateFrom;
+      if (dateTo) filter.date.$lte = dateTo;
     }
     if (req.query.venue) {
       filter.venue = req.query.venue;
@@ -986,21 +1159,41 @@ exports.getAdminBookings = async (req, res) => {
       filter.eventType = req.query.eventType;
     }
     if (req.query.search) {
+      const searchTerm = req.query.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
-        { customerName: { $regex: req.query.search, $options: "i" } },
-        { email: { $regex: req.query.search, $options: "i" } },
-        { phone: { $regex: req.query.search, $options: "i" } },
-        { confirmationNumber: { $regex: req.query.search, $options: "i" } }
+        { customerName: { $regex: searchTerm, $options: "i" } },
+        { email: { $regex: searchTerm, $options: "i" } },
+        { phone: { $regex: searchTerm, $options: "i" } },
+        { confirmationNumber: { $regex: searchTerm, $options: "i" } },
+        { venueName: { $regex: searchTerm, $options: "i" } }
       ];
     }
 
     const bookings = await EventBooking.find(filter)
-      .populate("venue", "name slug location type isActive")
+      .populate("venue", "name slug location type isActive max min basePrice currency packages additionalServices")
       .populate("event", "title slug eventType startDate")
       .populate("user", "name email")
       .populate("confirmedBy", "name email")
-      .sort({ createdAt: -1 });
+      .lean();
 
+    const now = new Date();
+    bookings.sort((left, right) => {
+      const leftDate = /^\d{4}-\d{2}-\d{2}$/.test(left.date || "")
+        ? new Date(`${left.date}T${/^\d{2}:\d{2}$/.test(left.startTime || "") ? left.startTime : "00:00"}:00`)
+        : new Date(NaN);
+      const rightDate = /^\d{4}-\d{2}-\d{2}$/.test(right.date || "")
+        ? new Date(`${right.date}T${/^\d{2}:\d{2}$/.test(right.startTime || "") ? right.startTime : "00:00"}:00`)
+        : new Date(NaN);
+      const leftValid = !Number.isNaN(leftDate.getTime());
+      const rightValid = !Number.isNaN(rightDate.getTime());
+      if (!leftValid && !rightValid) return String(left.confirmationNumber || "").localeCompare(String(right.confirmationNumber || ""));
+      if (!leftValid) return 1;
+      if (!rightValid) return -1;
+      const leftUpcoming = leftDate.getTime() >= now.getTime();
+      const rightUpcoming = rightDate.getTime() >= now.getTime();
+      if (leftUpcoming !== rightUpcoming) return leftUpcoming ? -1 : 1;
+      return leftUpcoming ? leftDate - rightDate : rightDate - leftDate;
+    });
     res.json(bookings);
   } catch (err) {
     console.error("getAdminBookings error:", err);
@@ -1023,12 +1216,10 @@ exports.updateBookingStatus = async (req, res) => {
       return res.status(400).json({ error: `Invalid status: ${status}` });
     }
 
-    const booking = await EventBooking.findOne(buildPropertyFilter(req, { _id: id }));
+    let booking = await EventBooking.findOne(buildPropertyFilter(req, { _id: id }));
     if (!booking) {
       return res.status(404).json({ error: "Booking request not found" });
     }
-
-    const previousStatus = booking.status;
 
     // Status transition rules
     if (booking.status === "COMPLETED" && status !== "COMPLETED") {
@@ -1038,56 +1229,60 @@ exports.updateBookingStatus = async (req, res) => {
       return res.status(400).json({ error: "Cancelled bookings cannot be reopened" });
     }
 
-    // If transitioning to CONFIRMED, execute with venue lock & conflict prevention
+    // Confirmation and conflict check commit atomically. Updating the venue
+    // revision makes concurrent confirmations contend even across app workers.
     if (status === "CONFIRMED" && booking.status !== "CONFIRMED") {
       if (booking.venue) {
-        const venueDoc = await EventVenue.findById(booking.venue);
-        if (venueDoc && !venueDoc.isActive) {
-          return res.status(400).json({
-            error: `Cannot confirm booking: Assigned venue "${venueDoc.name}" is currently inactive.`
-          });
-        }
+        const transactionResult = await withVenueScheduleTransaction(booking.venue, async (session) => {
+          const currentBooking = await EventBooking.findOne(buildPropertyFilter(req, { _id: id })).session(session);
+          if (!currentBooking) {
+            const error = new Error("Booking request not found");
+            error.statusCode = 404;
+            throw error;
+          }
+          if (currentBooking.status === "COMPLETED" && status !== "COMPLETED") {
+            const error = new Error("Completed bookings cannot change status");
+            error.statusCode = 400;
+            throw error;
+          }
+          if (currentBooking.status === "CANCELLED" && status !== "CANCELLED") {
+            const error = new Error("Cancelled bookings cannot be reopened");
+            error.statusCode = 400;
+            throw error;
+          }
+          if (currentBooking.status === "CONFIRMED") return { booking: currentBooking };
 
-        const conflict = await withVenueLock(booking.venue, async () => {
-          return await checkVenueConflict({
+          const venueDoc = await EventVenue.findOne({ _id: currentBooking.venue, property: req.propertyId }).session(session);
+          if (!venueDoc || !venueDoc.isActive) {
+            const error = new Error(`Cannot confirm booking: Assigned venue${venueDoc ? ` "${venueDoc.name}"` : ""} is missing or inactive.`);
+            error.statusCode = 400;
+            throw error;
+          }
+          const conflict = await checkVenueConflict({
             propertyId: req.propertyId,
-            venueId: booking.venue,
-            date: booking.date,
-            startTime: booking.startTime,
-            endTime: booking.endTime,
-            excludeBookingId: booking._id
+            venueId: currentBooking.venue,
+            date: currentBooking.date,
+            startTime: currentBooking.startTime,
+            endTime: currentBooking.endTime,
+            excludeBookingId: currentBooking._id,
+            session
           });
+          if (conflict.hasConflict) {
+            const error = new Error("Cannot confirm booking: Conflicting confirmed booking exists for this venue and time slot");
+            error.statusCode = 409;
+            error.conflictingBooking = conflict.conflictingBooking;
+            throw error;
+          }
+          await applyBookingStatusUpdate(currentBooking, status, notes, rejectionReason, cancellationReason, req, session);
+          return { booking: currentBooking };
         });
-
-        if (conflict.hasConflict) {
-          return res.status(409).json({
-            error: "Cannot confirm booking: Conflicting confirmed booking exists for this venue and time slot",
-            conflictingBooking: conflict.conflictingBooking
-          });
-        }
+        booking = transactionResult.booking;
+      } else {
+        await applyBookingStatusUpdate(booking, status, notes, rejectionReason, cancellationReason, req, null);
       }
-
-      booking.confirmedBy = req.user ? req.user._id : undefined;
-      booking.confirmedAt = new Date();
+    } else {
+      await applyBookingStatusUpdate(booking, status, notes, rejectionReason, cancellationReason, req, null);
     }
-
-    booking.status = status;
-    if (rejectionReason) booking.rejectionReason = rejectionReason;
-    if (cancellationReason) booking.cancellationReason = cancellationReason;
-    if (notes !== undefined) booking.internalNotes = notes;
-
-    const actionName = (notes && status === previousStatus)
-      ? "INTERNAL_NOTES_UPDATED"
-      : `STATUS_CHANGE_TO_${status}`;
-
-    booking.auditLog.push({
-      action: actionName,
-      performedBy: req.user ? req.user._id : undefined,
-      timestamp: new Date(),
-      notes: notes || rejectionReason || cancellationReason || ""
-    });
-
-    await booking.save();
 
     // Send status update notification safely
     await sendEventNotification({
@@ -1099,6 +1294,26 @@ exports.updateBookingStatus = async (req, res) => {
     res.json({ message: `Booking status updated to ${status}`, booking });
   } catch (err) {
     console.error("updateBookingStatus error:", err);
-    res.status(500).json({ error: "Failed to update booking status" });
+    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to update booking status", ...(err.conflictingBooking ? { conflictingBooking: err.conflictingBooking } : {}) });
   }
 };
+
+async function applyBookingStatusUpdate(booking, status, notes, rejectionReason, cancellationReason, req, session) {
+  const previousStatus = booking.status;
+  if (status === "CONFIRMED" && previousStatus !== "CONFIRMED") {
+    booking.confirmedBy = req.user ? req.user._id : undefined;
+    booking.confirmedAt = new Date();
+  }
+  booking.status = status;
+  if (rejectionReason) booking.rejectionReason = rejectionReason;
+  if (cancellationReason) booking.cancellationReason = cancellationReason;
+  if (notes !== undefined) booking.internalNotes = notes;
+  const actionName = (notes && status === previousStatus) ? "INTERNAL_NOTES_UPDATED" : `STATUS_CHANGE_TO_${status}`;
+  booking.auditLog.push({
+    action: actionName,
+    performedBy: req.user ? req.user._id : undefined,
+    timestamp: new Date(),
+    notes: notes || rejectionReason || cancellationReason || ""
+  });
+  await booking.save(session ? { session } : undefined);
+}

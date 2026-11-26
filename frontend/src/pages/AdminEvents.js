@@ -27,16 +27,14 @@ import {
   FaUtensils,
   FaSync,
   FaSave,
-  FaArrowLeft,
-  FaArrowRight,
   FaShieldAlt,
   FaListUl,
-  FaCalendarWeek
 } from 'react-icons/fa';
 import { eventAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { filterVenueBookings, getBookingDateKey, getVenueCalendarDates } from '../utils/venueSchedule';
 import { toast } from 'react-toastify';
-import { format, addDays, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isToday } from 'date-fns';
 import './AdminEvents.css';
 import './AdminPMS.css';
 import './RestaurantExperience.css';
@@ -44,8 +42,8 @@ import './RestaurantExperience.css';
 const AdminEvents = () => {
   const { user } = useAuth();
   const userRole = (user?.role || '').toLowerCase().trim();
-  const canManage = ['admin', 'manager', 'staff'].includes(userRole);
-  const canDelete = ['admin', 'manager'].includes(userRole);
+  const canManage = ['super_admin', 'admin', 'manager', 'staff'].includes(userRole);
+  const canDelete = ['super_admin', 'admin', 'manager'].includes(userRole);
 
   const [activeTab, setActiveTab] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
@@ -87,10 +85,14 @@ const AdminEvents = () => {
   // TAB 2: VENUE SCHEDULE & AVAILABILITY STATE (INDEPENDENT DATASET)
   // ---------------------------------------------------------------------------
   const [scheduleDate, setScheduleDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [scheduleVenueFilter, setScheduleVenueFilter] = useState('ALL');
-  const [scheduleViewMode, setScheduleViewMode] = useState('daily'); // 'daily' | 'weekly'
+  const scheduleViewMode = 'month';
   const [scheduleBookings, setScheduleBookings] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleStatusFilter, setScheduleStatusFilter] = useState('ALL');
+  const [scheduleTypeFilter, setScheduleTypeFilter] = useState('ALL');
+  const [scheduleSearch, setScheduleSearch] = useState('');
+  const [scheduleDateFrom, setScheduleDateFrom] = useState('');
+  const [scheduleDateTo, setScheduleDateTo] = useState('');
 
   // Live conflict / availability check tool
   const [availCheckForm, setAvailCheckForm] = useState({
@@ -100,6 +102,7 @@ const AdminEvents = () => {
     endTime: '15:00'
   });
   const [availCheckResult, setAvailCheckResult] = useState(null);
+  const [availabilityConflicts, setAvailabilityConflicts] = useState([]);
   const [availCheckLoading, setAvailCheckLoading] = useState(false);
 
   // ---------------------------------------------------------------------------
@@ -156,6 +159,12 @@ const AdminEvents = () => {
     price: '',
     currency: 'LKR'
   });
+  const [newAdditionalServiceInput, setNewAdditionalServiceInput] = useState({
+    name: '',
+    price: '',
+    currency: 'LKR',
+    isActive: true
+  });
 
   const [venueForm, setVenueForm] = useState({
     name: '',
@@ -172,6 +181,10 @@ const AdminEvents = () => {
     facilitiesText: 'Air conditioning, Sound system, Stage & lighting, Wi-Fi, Dedicated parking',
     seatingText: 'Banquet, Theatre, Classroom, Reception, U-Shape',
     packages: [],
+    basePrice: 0,
+    currency: 'LKR',
+    termsAndConditions: '',
+    additionalServices: [],
     isActive: true
   });
 
@@ -215,7 +228,7 @@ const AdminEvents = () => {
     if (activeTab === 'bookings') {
       loadBookings();
     } else if (activeTab === 'schedule') {
-      loadScheduleBookings(scheduleDate);
+      loadScheduleBookings(scheduleDate, scheduleViewMode);
     } else if (activeTab === 'events') {
       loadEvents();
     } else if (activeTab === 'venues') {
@@ -225,9 +238,9 @@ const AdminEvents = () => {
 
   useEffect(() => {
     if (activeTab === 'schedule') {
-      loadScheduleBookings(scheduleDate);
+      loadScheduleBookings(scheduleDate, scheduleViewMode);
     }
-  }, [scheduleDate]);
+  }, [scheduleDate, scheduleViewMode]);
 
   const loadInitialData = async () => {
     try {
@@ -237,7 +250,7 @@ const AdminEvents = () => {
         loadBookings(), 
         loadVenues(), 
         loadEvents(),
-        loadScheduleBookings(scheduleDate)
+        loadScheduleBookings(scheduleDate, scheduleViewMode)
       ]);
     } catch (err) {
       console.error('Failed to load initial event data:', err);
@@ -254,7 +267,7 @@ const AdminEvents = () => {
         loadBookings(), 
         loadVenues(), 
         loadEvents(),
-        loadScheduleBookings(scheduleDate)
+        loadScheduleBookings(scheduleDate, scheduleViewMode)
       ]);
       toast.success('All Events & Banquets data refreshed');
     } catch (err) {
@@ -296,11 +309,20 @@ const AdminEvents = () => {
     }
   };
 
-  const loadScheduleBookings = async (targetDate) => {
+  const loadScheduleBookings = async (targetDate, viewMode = scheduleViewMode) => {
     try {
       setScheduleLoading(true);
-      // Fetch all bookings for the target date so schedule view is independent of table filters
-      const res = await eventAPI.getAdminBookings({ date: targetDate });
+      const focusDate = new Date(`${targetDate}T00:00:00`);
+      const rangeStart = viewMode === 'month'
+        ? startOfWeek(startOfMonth(focusDate), { weekStartsOn: 1 })
+        : viewMode === 'week' ? startOfWeek(focusDate, { weekStartsOn: 1 }) : focusDate;
+      const rangeEnd = viewMode === 'month'
+        ? endOfWeek(endOfMonth(focusDate), { weekStartsOn: 1 })
+        : viewMode === 'week' ? endOfWeek(focusDate, { weekStartsOn: 1 }) : focusDate;
+      const res = await eventAPI.getAdminBookings({
+        dateFrom: format(rangeStart, 'yyyy-MM-dd'),
+        dateTo: format(rangeEnd, 'yyyy-MM-dd')
+      });
       setScheduleBookings(res.data || []);
     } catch (err) {
       console.warn('Failed to load schedule bookings for date:', targetDate);
@@ -576,6 +598,10 @@ const AdminEvents = () => {
       facilitiesText: 'Air conditioning, Sound system, Stage & lighting, Wi-Fi, Dedicated parking',
       seatingText: 'Banquet, Theatre, Classroom, Reception, U-Shape',
       packages: [],
+      basePrice: 0,
+      currency: 'LKR',
+      termsAndConditions: '',
+      additionalServices: [],
       isActive: true
     });
     setNewPackageInput({
@@ -585,6 +611,7 @@ const AdminEvents = () => {
       price: '',
       currency: 'LKR'
     });
+    setNewAdditionalServiceInput({ name: '', price: '', currency: 'LKR', isActive: true });
     setShowVenueModal(true);
   };
 
@@ -605,6 +632,10 @@ const AdminEvents = () => {
       facilitiesText: (v.facilities || []).join(', '),
       seatingText: (v.seating || []).join(', '),
       packages: v.packages ? [...v.packages] : [],
+      basePrice: v.basePrice ?? 0,
+      currency: v.currency || 'LKR',
+      termsAndConditions: v.termsAndConditions || '',
+      additionalServices: v.additionalServices ? [...v.additionalServices] : [],
       isActive: v.isActive !== false
     });
     setNewPackageInput({
@@ -614,6 +645,7 @@ const AdminEvents = () => {
       price: '',
       currency: 'LKR'
     });
+    setNewAdditionalServiceInput({ name: '', price: '', currency: 'LKR', isActive: true });
     setShowVenueModal(true);
   };
 
@@ -631,7 +663,8 @@ const AdminEvents = () => {
       event: newPackageInput.event.trim() || 'Weddings & occasions',
       includes: newPackageInput.includes.trim(),
       price: Number(newPackageInput.price) || 0,
-      currency: newPackageInput.currency || 'LKR'
+      currency: newPackageInput.currency || 'LKR',
+      isActive: true
     };
     setVenueForm(prev => ({
       ...prev,
@@ -650,6 +683,37 @@ const AdminEvents = () => {
     setVenueForm(prev => ({
       ...prev,
       packages: prev.packages.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleAddAdditionalService = () => {
+    if (!newAdditionalServiceInput.name.trim()) {
+      toast.error('Additional service name is required');
+      return;
+    }
+    if (Number(newAdditionalServiceInput.price) < 0) {
+      toast.error('Additional service price cannot be negative');
+      return;
+    }
+    setVenueForm((previous) => ({
+      ...previous,
+      additionalServices: [
+        ...(previous.additionalServices || []),
+        {
+          name: newAdditionalServiceInput.name.trim(),
+          price: Number(newAdditionalServiceInput.price) || 0,
+          currency: newAdditionalServiceInput.currency || 'LKR',
+          isActive: true
+        }
+      ]
+    }));
+    setNewAdditionalServiceInput({ name: '', price: '', currency: 'LKR', isActive: true });
+  };
+
+  const handleRemoveAdditionalService = (index) => {
+    setVenueForm((previous) => ({
+      ...previous,
+      additionalServices: (previous.additionalServices || []).filter((_, i) => i !== index)
     }));
   };
 
@@ -673,6 +737,10 @@ const AdminEvents = () => {
       area: Number(venueForm.area) || 100,
       min: Number(venueForm.min) || 1,
       max: Number(venueForm.max),
+      basePrice: Number(venueForm.basePrice) || 0,
+      currency: venueForm.currency || 'LKR',
+      termsAndConditions: venueForm.termsAndConditions || '',
+      additionalServices: venueForm.additionalServices || [],
       facilities: venueForm.facilitiesText.split(',').map((s) => s.trim()).filter(Boolean),
       seating: venueForm.seatingText.split(',').map((s) => s.trim()).filter(Boolean),
       gallery: venueForm.galleryText
@@ -757,6 +825,7 @@ const AdminEvents = () => {
     try {
       setAvailCheckLoading(true);
       setAvailCheckResult(null);
+      setAvailabilityConflicts([]);
       const res = await eventAPI.checkAvailability({
         venueId: availCheckForm.venueId || undefined,
         date: availCheckForm.date,
@@ -764,25 +833,40 @@ const AdminEvents = () => {
         endTime: availCheckForm.endTime
       });
       setAvailCheckResult(res.data);
+      if (!res.data.available) {
+        const details = await eventAPI.getAdminBookings({ date: availCheckForm.date, venue: availCheckForm.venueId });
+        setAvailabilityConflicts((details.data || []).filter((booking) => booking.status === 'CONFIRMED' && booking.startTime < availCheckForm.endTime && booking.endTime > availCheckForm.startTime));
+      }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Availability query failed');
+      const message = err.response?.data?.error || 'Availability query failed';
+      setAvailCheckResult({ available: false, unavailable: true, message });
+      setAvailabilityConflicts([]);
+      toast.error(message);
     } finally {
       setAvailCheckLoading(false);
     }
   };
 
-  const handleScheduleDateShift = (days) => {
-    const current = new Date(`${scheduleDate}T00:00:00`);
-    const shifted = days > 0 ? addDays(current, days) : subDays(current, Math.abs(days));
-    const newDateStr = format(shifted, 'yyyy-MM-dd');
-    setScheduleDate(newDateStr);
-  };
+  const calendarDates = useMemo(() => {
+    return getVenueCalendarDates(scheduleDate, scheduleViewMode);
+  }, [scheduleDate, scheduleViewMode]);
 
-  // Derived: Venue schedule map using scheduleBookings (completely independent of Tab 1 table filters)
+  const visibleScheduleBookings = useMemo(() => filterVenueBookings(scheduleBookings, {
+    status: scheduleStatusFilter,
+    eventType: scheduleTypeFilter,
+    dateFrom: scheduleDateFrom,
+    dateTo: scheduleDateTo,
+    search: scheduleSearch
+  }), [scheduleBookings, scheduleStatusFilter, scheduleTypeFilter, scheduleDateFrom, scheduleDateTo, scheduleSearch]);
+
+  const bookingsForDate = (date) => visibleScheduleBookings
+    .filter((booking) => booking.date === getBookingDateKey(date))
+    .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')));
+
+  // Derived: venue schedule map used to surface overlaps already present in saved bookings.
   const venueScheduleData = useMemo(() => {
     return venues.map(venue => {
-      // Find all bookings for this venue on scheduleDate
-      const venueBookings = scheduleBookings.filter(b => {
+      const venueBookings = visibleScheduleBookings.filter(b => {
         const matchVenue = (b.venue?._id === venue._id || b.venue === venue._id || b.venueName === venue.name);
         return matchVenue && b.date === scheduleDate;
       }).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
@@ -805,11 +889,8 @@ const AdminEvents = () => {
         bookings: venueBookings,
         conflicts
       };
-    }).filter(item => {
-      if (scheduleVenueFilter === 'ALL') return true;
-      return item.venue._id === scheduleVenueFilter;
     });
-  }, [venues, scheduleBookings, scheduleDate, scheduleVenueFilter]);
+  }, [venues, visibleScheduleBookings, scheduleDate]);
 
   // Derived: Pagination for bookings
   const paginatedBookings = useMemo(() => {
@@ -1367,68 +1448,19 @@ const AdminEvents = () => {
       {/* ===================================================================== */}
       {activeTab === 'schedule' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Schedule Controls Header */}
-          <div className="pms-card" style={{ padding: '1.25rem 1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0F172A' }}>
-                  Daily Venue Master Schedule
-                </h3>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748B' }}>
-                  View scheduled banquets, reserved time slots, and verify venue availability.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                {/* Date Controls with Quick Shift */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <button 
-                    type="button" 
-                    className="pms-btn pms-btn-sm pms-btn-secondary"
-                    onClick={() => handleScheduleDateShift(-1)}
-                    title="Previous Day"
-                  >
-                    <FaArrowLeft size={10} />
-                  </button>
-                  <input
-                    type="date"
-                    className="pms-input"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    style={{ padding: '0.4rem 0.65rem' }}
-                  />
-                  <button 
-                    type="button" 
-                    className="pms-btn pms-btn-sm pms-btn-secondary"
-                    onClick={() => handleScheduleDateShift(1)}
-                    title="Next Day"
-                  >
-                    <FaArrowRight size={10} />
-                  </button>
-                  <button 
-                    type="button" 
-                    className="pms-btn pms-btn-sm pms-btn-secondary"
-                    onClick={() => setScheduleDate(format(new Date(), 'yyyy-MM-dd'))}
-                  >
-                    Today
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Filter Venue:</label>
-                  <select
-                    className="pms-select"
-                    value={scheduleVenueFilter}
-                    onChange={(e) => setScheduleVenueFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Venues & Halls</option>
-                    {venues.map(v => (
-                      <option key={v._id} value={v._id}>{v.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
+          <div className="pms-card" style={{ padding: '1rem 1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'end' }}>
+            <label style={{ flex: '1 1 220px' }}>Search customer, event, reference or venue
+              <input className="pms-input" value={scheduleSearch} onChange={(e) => setScheduleSearch(e.target.value)} placeholder="Search schedule..." />
+            </label>
+            <label>From date<input type="date" className="pms-input" value={scheduleDateFrom} onChange={(e) => setScheduleDateFrom(e.target.value)} /></label>
+            <label>To date<input type="date" className="pms-input" value={scheduleDateTo} onChange={(e) => setScheduleDateTo(e.target.value)} /></label>
+            <label>Status<select className="pms-select" value={scheduleStatusFilter} onChange={(e) => setScheduleStatusFilter(e.target.value)}>
+              <option value="ALL">All statuses</option><option value="PENDING">Pending</option><option value="CONFIRMED">Confirmed</option><option value="REJECTED">Rejected</option><option value="CANCELLED">Cancelled</option><option value="COMPLETED">Completed</option>
+            </select></label>
+            <label>Event type<select className="pms-select" value={scheduleTypeFilter} onChange={(e) => setScheduleTypeFilter(e.target.value)}>
+              <option value="ALL">All event types</option>{[...new Set(scheduleBookings.map((booking) => booking.eventType).filter(Boolean))].sort().map((type) => <option key={type} value={type}>{type}</option>)}
+            </select></label>
+            <button type="button" className="pms-btn pms-btn-secondary" onClick={() => { setScheduleSearch(''); setScheduleDateFrom(''); setScheduleDateTo(''); setScheduleStatusFilter('ALL'); setScheduleTypeFilter('ALL'); }}>Clear filters</button>
           </div>
 
           {/* Interactive Live Conflict / Availability Checker Tool */}
@@ -1515,14 +1547,48 @@ const AdminEvents = () => {
                   <FaExclamationTriangle size={18} />
                 )}
                 <div>
-                  <strong>{availCheckResult.available ? 'Space is Available!' : 'Conflict Detected!'}</strong>
+                  <strong>{availCheckResult.available ? 'Available' : availCheckResult.unavailable ? 'Venue Unavailable' : availabilityConflicts.length && availabilityConflicts.some((booking) => booking.startTime <= availCheckForm.startTime && booking.endTime >= availCheckForm.endTime) ? 'Already booked for this time' : availabilityConflicts.length ? 'Partially occupied' : 'Conflict detected'}</strong>
                   <div style={{ fontSize: '0.85rem' }}>{availCheckResult.message}</div>
+                  {availabilityConflicts.map((booking) => <div key={booking._id} style={{ fontSize: '0.82rem', marginTop: 4 }}>Conflicts with {booking.confirmationNumber} · {booking.customerName} · {booking.startTime}–{booking.endTime}</div>)}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Venue Timeline Cards */}
+          {/* Month, week, and day calendar */}
+          <section className="pms-card" aria-label={`${scheduleViewMode} venue calendar`}>
+            <div className="pms-card-header" style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div><strong>{scheduleViewMode === 'month' ? format(new Date(`${scheduleDate}T00:00:00`), 'MMMM yyyy') : scheduleViewMode === 'week' ? `${format(calendarDates[0], 'MMM d')} – ${format(calendarDates[6], 'MMM d, yyyy')}` : format(calendarDates[0], 'EEEE, MMMM d, yyyy')}</strong>
+                <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: 3 }}>Schedule data is retrieved from saved event bookings in the selected property.</div></div>
+              <span style={{ fontSize: '0.8rem', color: '#64748B' }}>{visibleScheduleBookings.length} matching booking{visibleScheduleBookings.length === 1 ? '' : 's'}</span>
+            </div>
+            {scheduleLoading ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>Loading venue calendar...</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: scheduleViewMode === 'day' ? '1fr' : 'repeat(7, minmax(110px, 1fr))', overflowX: 'auto' }}>
+                {scheduleViewMode !== 'day' && ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((name) => <div key={name} style={{ padding: '0.65rem', fontSize: '0.75rem', fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>{name}</div>)}
+                {calendarDates.map((date) => {
+                  const dateBookings = bookingsForDate(date);
+                  return <div key={format(date, 'yyyy-MM-dd')} style={{ minHeight: scheduleViewMode === 'month' ? 130 : 260, padding: '0.55rem', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', background: scheduleViewMode === 'month' && !isSameMonth(date, new Date(`${scheduleDate}T00:00:00`)) ? '#F8FAFC' : '#FFF' }}>
+                    <button type="button" onClick={() => setScheduleDate(format(date, 'yyyy-MM-dd'))} aria-label={`Select ${format(date, 'MMMM d, yyyy')}`} style={{ border: 0, background: 'transparent', padding: '0.15rem 0.35rem', borderRadius: 20, fontWeight: isToday(date) ? 700 : 500, color: isToday(date) ? '#FFF' : '#334155', backgroundColor: isToday(date) ? 'var(--evt-forest)' : 'transparent', cursor: 'pointer' }}>{format(date, scheduleViewMode === 'day' ? 'EEEE, MMMM d' : 'd')}</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
+                      {dateBookings.map((booking) => {
+                        const statusColors = { CONFIRMED: ['#ECFDF5', '#047857', '#A7F3D0'], PENDING: ['#FFFBEB', '#B45309', '#FDE68A'], REJECTED: ['#FEF2F2', '#B91C1C', '#FECACA'], CANCELLED: ['#F1F5F9', '#475569', '#CBD5E1'], COMPLETED: ['#EFF6FF', '#1D4ED8', '#BFDBFE'] };
+                        const [background, color, border] = statusColors[booking.status] || statusColors.PENDING;
+                        return <button key={booking._id} type="button" onClick={() => { setSelectedBookingModal(booking); setStatusUpdateNotes(booking.internalNotes || ''); setConflictErrorNotice(null); }} style={{ textAlign: 'left', width: '100%', padding: '0.45rem 0.5rem', borderRadius: 6, border: `1px solid ${border}`, background, color, cursor: 'pointer', fontSize: '0.75rem' }} title={`${booking.event?.title || booking.eventType} · ${booking.venue?.name || booking.venueName || 'Venue not specified'} · ${booking.customerName}`}>
+                          <strong>{booking.startTime}–{booking.endTime}</strong><div style={{ fontWeight: 700 }}>{booking.event?.title || booking.eventType || 'Event booking'}</div><div>{booking.venue?.name || booking.venueName || 'Venue not specified'}</div><div>{booking.customerName} · {booking.status}</div>
+                        </button>;
+                      })}
+                      {dateBookings.length === 0 && scheduleViewMode !== 'month' && <span style={{ color: '#94A3B8', fontSize: '0.8rem', padding: '0.5rem 0' }}>No bookings</span>}
+                    </div>
+                  </div>;
+                })}
+                {visibleScheduleBookings.length === 0 && <div style={{ padding: '1.25rem', color: '#64748B', gridColumn: '1 / -1' }}>No saved bookings match this view and its filters.</div>}
+              </div>
+            )}
+          </section>
+
+          {/* Selected-day venue details and existing overlap warnings */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {scheduleLoading ? (
               <div className="pms-card" style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>
@@ -1538,7 +1604,7 @@ const AdminEvents = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#0F172A' }}>{venue.name}</h4>
+                        <button type="button" onClick={() => setSelectedVenueDetailsModal(venue)} style={{ margin: 0, padding: 0, border: 0, background: 'transparent', font: 'inherit', fontWeight: 700, fontSize: '1.1rem', color: '#0F172A', cursor: 'pointer', textDecoration: 'underline' }}>{venue.name}</button>
                         <span className="pms-pill pms-pill-secondary">{venue.type}</span>
                         {venue.isActive ? (
                           <span className="pms-pill pms-pill-success">Active</span>
@@ -2066,9 +2132,13 @@ const AdminEvents = () => {
                 {selectedBookingModal.selectedPackage && (
                   <div><strong>Package:</strong> {selectedBookingModal.selectedPackage}</div>
                 )}
-                {selectedBookingModal.estimatedPrice > 0 && (
-                  <div><strong>Estimated Price:</strong> Rs. {Number(selectedBookingModal.estimatedPrice).toLocaleString()}</div>
-                )}
+                <div><strong>Total price:</strong> {selectedBookingModal.currency || 'LKR'} {Number(selectedBookingModal.estimatedPrice || 0).toLocaleString()}</div>
+                <div><strong>Payment status:</strong> {selectedBookingModal.paymentStatus || 'UNPAID'}</div>
+                <div><strong>Amount paid:</strong> {selectedBookingModal.currency || 'LKR'} {Number(selectedBookingModal.paidAmount || 0).toLocaleString()}</div>
+                <div><strong>Outstanding:</strong> {selectedBookingModal.currency || 'LKR'} {Math.max(0, Number(selectedBookingModal.estimatedPrice || 0) - Number(selectedBookingModal.paidAmount || 0)).toLocaleString()}</div>
+                {selectedBookingModal.basePriceSnapshot !== undefined && <div><strong>Venue base price:</strong> {selectedBookingModal.currency || 'LKR'} {Number(selectedBookingModal.basePriceSnapshot || 0).toLocaleString()}</div>}
+                {selectedBookingModal.packagePriceSnapshot !== undefined && <div><strong>Package price:</strong> {selectedBookingModal.currency || 'LKR'} {Number(selectedBookingModal.packagePriceSnapshot || 0).toLocaleString()}</div>}
+                {selectedBookingModal.additionalServiceNames?.length > 0 && <div><strong>Additional services:</strong> {selectedBookingModal.additionalServiceNames.join(', ')} ({selectedBookingModal.currency || 'LKR'} {Number(selectedBookingModal.additionalServiceTotal || 0).toLocaleString()})</div>}
                 {selectedBookingModal.event?.title && (
                   <div><strong>Associated Event:</strong> {selectedBookingModal.event.title}</div>
                 )}
@@ -2971,6 +3041,22 @@ const AdminEvents = () => {
                   />
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
+                  <div className="pms-form-group">
+                    <label className="pms-form-label">Base Venue Price</label>
+                    <input type="number" min="0" step="0.01" className="pms-input" value={venueForm.basePrice} onChange={(e) => setVenueForm({ ...venueForm, basePrice: e.target.value })} />
+                  </div>
+                  <div className="pms-form-group">
+                    <label className="pms-form-label">Currency</label>
+                    <input type="text" maxLength="3" className="pms-input" value={venueForm.currency} onChange={(e) => setVenueForm({ ...venueForm, currency: e.target.value.toUpperCase() })} />
+                  </div>
+                </div>
+
+                <div className="pms-form-group">
+                  <label className="pms-form-label">Terms and Conditions</label>
+                  <textarea className="pms-textarea" rows="2" value={venueForm.termsAndConditions} onChange={(e) => setVenueForm({ ...venueForm, termsAndConditions: e.target.value })} />
+                </div>
+
                 {/* Venue Packages Management */}
                 <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '1rem', marginBottom: '1rem' }}>
                   <label className="pms-form-label" style={{ marginBottom: '0.5rem' }}>
@@ -2985,13 +3071,25 @@ const AdminEvents = () => {
                             <strong>{pkg.name}</strong> &bull; Rs. {Number(pkg.price).toLocaleString()}
                             <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{pkg.includes || 'Standard banquet inclusions'}</div>
                           </div>
-                          <button
-                            type="button"
-                            className="pms-btn pms-btn-sm pms-btn-danger"
-                            onClick={() => handleRemoveVenuePackage(idx)}
-                          >
-                            <FaTrash size={10} />
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button
+                              type="button"
+                              className="pms-btn pms-btn-sm"
+                              onClick={() => setVenueForm((previous) => ({
+                                ...previous,
+                                packages: previous.packages.map((item, itemIndex) => itemIndex === idx ? { ...item, isActive: item.isActive === false } : item)
+                              }))}
+                            >
+                              {pkg.isActive === false ? 'Activate' : 'Deactivate'}
+                            </button>
+                            <button
+                              type="button"
+                              className="pms-btn pms-btn-sm pms-btn-danger"
+                              onClick={() => handleRemoveVenuePackage(idx)}
+                            >
+                              <FaTrash size={10} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3037,6 +3135,24 @@ const AdminEvents = () => {
                     >
                       <FaPlus /> Add
                     </button>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '1rem', marginBottom: '1rem' }}>
+                  <label className="pms-form-label" style={{ marginBottom: '0.5rem' }}>
+                    Additional Services ({venueForm.additionalServices?.length || 0})
+                  </label>
+                  {(venueForm.additionalServices || []).map((service, index) => (
+                    <div key={`${service.name}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '4px', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
+                      <div><strong>{service.name}</strong> &bull; {service.currency || 'LKR'} {Number(service.price || 0).toLocaleString()}</div>
+                      <button type="button" className="pms-btn pms-btn-sm pms-btn-danger" onClick={() => handleRemoveAdditionalService(index)}><FaTrash size={10} /></button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'flex-end', background: '#F1F5F9', padding: '0.75rem', borderRadius: '6px' }}>
+                    <div><span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Service Name</span><input type="text" className="pms-input" placeholder="e.g. Photography" value={newAdditionalServiceInput.name} onChange={(e) => setNewAdditionalServiceInput({ ...newAdditionalServiceInput, name: e.target.value })} /></div>
+                    <div><span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Price</span><input type="number" min="0" className="pms-input" value={newAdditionalServiceInput.price} onChange={(e) => setNewAdditionalServiceInput({ ...newAdditionalServiceInput, price: e.target.value })} /></div>
+                    <div><span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Currency</span><input type="text" maxLength="3" className="pms-input" value={newAdditionalServiceInput.currency} onChange={(e) => setNewAdditionalServiceInput({ ...newAdditionalServiceInput, currency: e.target.value.toUpperCase() })} /></div>
+                    <button type="button" className="pms-btn pms-btn-sm pms-btn-primary" onClick={handleAddAdditionalService} style={{ height: '36px' }}><FaPlus /> Add</button>
                   </div>
                 </div>
 
@@ -3101,6 +3217,7 @@ const AdminEvents = () => {
                 <div><strong>Area:</strong> {selectedVenueDetailsModal.area} m²</div>
                 <div><strong>Capacity:</strong> {selectedVenueDetailsModal.min}–{selectedVenueDetailsModal.max} guests</div>
                 <div><strong>Type:</strong> {selectedVenueDetailsModal.type}</div>
+                <div><strong>Base price:</strong> {selectedVenueDetailsModal.currency || 'LKR'} {Number(selectedVenueDetailsModal.basePrice || 0).toLocaleString()}</div>
               </div>
 
               {selectedVenueDetailsModal.description && (
@@ -3109,6 +3226,9 @@ const AdminEvents = () => {
                   <p style={{ margin: '0.25rem 0 0', color: '#475569' }}>{selectedVenueDetailsModal.description}</p>
                 </div>
               )}
+
+              {!!selectedVenueDetailsModal.packages?.length && <div style={{ marginBottom: '1rem' }}><strong>Packages:</strong>{selectedVenueDetailsModal.packages.map((item, index) => <div key={`${item.name}-${index}`} style={{ marginTop: 4 }}>{item.name} · {item.currency || selectedVenueDetailsModal.currency} {Number(item.price || 0).toLocaleString()} {item.isActive === false ? '(Inactive)' : ''}</div>)}</div>}
+              {!!selectedVenueDetailsModal.additionalServices?.length && <div style={{ marginBottom: '1rem' }}><strong>Additional services:</strong>{selectedVenueDetailsModal.additionalServices.map((item, index) => <div key={`${item.name}-${index}`} style={{ marginTop: 4 }}>{item.name} · {item.currency || selectedVenueDetailsModal.currency} {Number(item.price || 0).toLocaleString()} {item.isActive === false ? '(Inactive)' : ''}</div>)}</div>}
 
               {selectedVenueDetailsModal.facilities && selectedVenueDetailsModal.facilities.length > 0 && (
                 <div style={{ marginBottom: '1rem' }}>

@@ -54,8 +54,10 @@ const resolveBusinessEntity = async (purpose, targetId, sessionUser) => {
         err.statusCode = 403;
         throw err;
       }
-      amount = Number(record.totalAmount || 0);
-      currency = record.currency || "LKR";
+        amount = record.reservationTotalPrice != null
+          ? Number(record.reservationTotalPrice)
+          : (record.totalAmount != null ? Number(record.totalAmount) : 0);
+        currency = record.reservationPriceCurrency || record.currency || "LKR";
       propertyId = record.property || record.restaurant?.property;
       title = `Dining at ${record.restaurant?.name || "Serendib Restaurant"} — Ref ${record.confirmationNumber}`;
       break;
@@ -330,14 +332,33 @@ exports.handlePayHereWebhook = async (req, res) => {
       } else if (payment.purpose === "restaurant_dining" && payment.restaurantReservation) {
         const dining = await RestaurantReservation.findById(payment.restaurantReservation);
         if (dining) {
+          const confirmedPayments = await Payment.find({
+            restaurantReservation: dining._id,
+            paymentStatus: "completed"
+          }).select("amount");
+          const confirmedAmount = confirmedPayments.reduce((sum, confirmed) => sum + (Number(confirmed.amount) || 0), 0);
           dining.status = "CONFIRMED";
+          dining.paymentStatus = "Paid";
+          dining.paidAmount = confirmedAmount;
+          const savedTotal = dining.reservationTotalPrice != null
+            ? Number(dining.reservationTotalPrice)
+            : (dining.totalAmount != null ? Number(dining.totalAmount) : null);
+          if (savedTotal != null && dining.paidAmount < savedTotal) dining.paymentStatus = "Partially Paid";
           dining.notes = (dining.notes ? dining.notes + " | " : "") + `Paid online via PayHere (${payment.paymentReference})`;
           await dining.save();
         }
       } else if (payment.purpose === "event_booking" && payment.eventBooking) {
         const eventBooking = await EventBooking.findById(payment.eventBooking);
         if (eventBooking) {
-          eventBooking.status = "CONFIRMED";
+          const confirmedPayments = await Payment.find({
+            eventBooking: eventBooking._id,
+            paymentStatus: "completed"
+          }).select("amount");
+          eventBooking.paidAmount = confirmedPayments.reduce((sum, confirmed) => sum + (Number(confirmed.amount) || 0), 0);
+          const savedTotal = Number(eventBooking.estimatedPrice) || 0;
+          eventBooking.paymentStatus = savedTotal > 0 && eventBooking.paidAmount >= savedTotal
+            ? "PAID"
+            : (eventBooking.paidAmount > 0 ? "PARTIALLY_PAID" : "UNPAID");
           eventBooking.auditLog.push({
             action: "PAYMENT_CONFIRMED",
             timestamp: new Date(),

@@ -85,6 +85,20 @@ const restaurantSchema = new mongoose.Schema({
     default: 80,
     min: 1
   },
+  reservationPricePerGuest: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  reservationPriceCurrency: {
+    type: String,
+    default: "LKR",
+    uppercase: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 3,
+    match: /^[A-Z]{3}$/
+  },
   diningStyles: [{
     type: String,
     trim: true

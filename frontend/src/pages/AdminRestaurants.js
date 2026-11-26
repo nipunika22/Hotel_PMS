@@ -33,12 +33,16 @@ const AdminRestaurants = () => {
   const [restaurants, setRestaurants] = useState([]);
   const [selectedRestFilter, setSelectedRestFilter] = useState('');
   const [restaurantForm, setRestaurantForm] = useState(null);
+  const [restaurantDetails, setRestaurantDetails] = useState(null);
+  const [restaurantSearch, setRestaurantSearch] = useState('');
+  const [restaurantStatusFilter, setRestaurantStatusFilter] = useState('all');
   const [savingRestaurant, setSavingRestaurant] = useState(false);
 
   // 1. Reservations tab state
   const [reservations, setReservations] = useState([]);
   const [resStatusFilter, setResStatusFilter] = useState('ALL');
-  const [resDateFilter, setResDateFilter] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [resDateFilter, setResDateFilter] = useState('');
+  const [reservationCategory, setReservationCategory] = useState('all');
   const [resSearch, setResSearch] = useState('');
   
   // Folio Charging Modal State
@@ -101,7 +105,7 @@ const AdminRestaurants = () => {
     if (activeTab === 'menus') loadMenuItems();
     if (activeTab === 'buffets') loadBuffets();
     if (activeTab === 'offers') loadOffers();
-  }, [activeTab, selectedRestFilter, resStatusFilter, resDateFilter]);
+  }, [activeTab, selectedRestFilter, resStatusFilter, resDateFilter, reservationCategory]);
 
   const loadInitialAdminData = async () => {
     try {
@@ -133,7 +137,8 @@ const AdminRestaurants = () => {
         restaurantId: selectedRestFilter || undefined,
         status: resStatusFilter !== 'ALL' ? resStatusFilter : undefined,
         date: resDateFilter || undefined,
-        search: resSearch || undefined
+        search: resSearch || undefined,
+        category: reservationCategory === 'all' ? undefined : reservationCategory
       });
       if (res.data?.data) setReservations(res.data.data);
     } catch (err) {
@@ -235,7 +240,13 @@ const AdminRestaurants = () => {
     if (!restaurantForm) return;
     setSavingRestaurant(true);
     try {
-      const body = { ...restaurantForm, capacity: Number(restaurantForm.capacity) };
+      const reservationPricePerGuest = Number(restaurantForm.reservationPricePerGuest || 0);
+      const reservationPriceCurrency = String(restaurantForm.reservationPriceCurrency || 'LKR').trim().toUpperCase();
+      if (!Number.isFinite(reservationPricePerGuest) || reservationPricePerGuest < 0 || !/^[A-Z]{3}$/.test(reservationPriceCurrency)) {
+        toast.error('Enter a valid non-negative per-guest rate and 3-letter currency code.');
+        return;
+      }
+      const body = { ...restaurantForm, capacity: Number(restaurantForm.capacity), reservationPricePerGuest, reservationPriceCurrency };
       if (restaurantForm._id) await restaurantAPI.updateRestaurant(restaurantForm._id, body);
       else await restaurantAPI.createRestaurant(body);
       const response = await restaurantAPI.getAdminRestaurants();
@@ -251,15 +262,39 @@ const AdminRestaurants = () => {
   };
 
   const handleDeactivateRestaurant = async (restaurant) => {
-    if (!window.confirm(`Deactivate ${restaurant.name}? Existing restaurant records will be retained.`)) return;
+    if (!window.confirm(`Deactivate ${restaurant.name}? Existing restaurant records and reservations will be retained.`)) return;
     try {
       await restaurantAPI.deleteRestaurant(restaurant._id);
-      setRestaurants((current) => current.map((item) => item._id === restaurant._id ? { ...item, active: false } : item));
+      const response = await restaurantAPI.getAdminRestaurants();
+      const updated = response.data?.data || [];
+      setRestaurants(updated);
+      setRestaurantDetails(updated.find((item) => item._id === restaurant._id) || null);
       toast.success('Restaurant deactivated.');
     } catch (error) {
       toast.error(error.response?.data?.error || 'Unable to deactivate restaurant.');
     }
   };
+
+  const handleActivateRestaurant = async (restaurant) => {
+    try {
+      await restaurantAPI.updateRestaurant(restaurant._id, { active: true });
+      const response = await restaurantAPI.getAdminRestaurants();
+      const updated = response.data?.data || [];
+      setRestaurants(updated);
+      setRestaurantDetails(updated.find((item) => item._id === restaurant._id) || null);
+      toast.success('Restaurant activated.');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Unable to activate restaurant.');
+    }
+  };
+
+  const visibleRestaurants = restaurants.filter((restaurant) => {
+    const matchesSearch = `${restaurant.name || ''} ${restaurant.description || ''} ${restaurant.location || ''} ${restaurant.cuisine || ''} ${restaurant.restaurantType || ''}`
+      .toLowerCase().includes(restaurantSearch.toLowerCase());
+    const matchesStatus = restaurantStatusFilter === 'all'
+      || (restaurantStatusFilter === 'active' ? restaurant.active !== false : restaurant.active === false);
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="rest-admin-wrap">
@@ -277,7 +312,7 @@ const AdminRestaurants = () => {
 
         {/* Global Restaurant Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button type="button" className="btn btn-primary" onClick={() => setRestaurantForm({ name: '', slug: '', cuisine: '', location: '', openingHours: '', contactPhone: '', contactEmail: '', description: '', heroImage: '', capacity: 80, active: true })}><FaPlus /> Add Restaurant</button>
+          <button type="button" className="btn btn-primary" onClick={() => setRestaurantForm({ name: '', slug: '', cuisine: '', restaurantType: 'Fine Dining', location: '', openingHours: '', contactPhone: '', contactEmail: '', description: '', heroImage: '', capacity: 80, reservationPricePerGuest: 0, reservationPriceCurrency: 'LKR', active: true })}><FaPlus /> Add Restaurant</button>
           <select 
             className="rest-form-select"
             style={{ minWidth: '220px', padding: '0.65rem 1rem' }}
@@ -293,9 +328,86 @@ const AdminRestaurants = () => {
       </div>
 
       <section id="restaurant-records" className="rest-admin-table-container" style={{ marginBottom: '1.25rem', padding: '1rem' }}>
-        <h2 style={{ marginTop: 0 }}>Restaurants</h2>
-        {restaurants.length ? <div style={{ overflowX: 'auto' }}><table className="rest-pms-table"><thead><tr><th>Name</th><th>Cuisine</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead><tbody>{restaurants.map((restaurant) => <tr key={restaurant._id}><td>{restaurant.name}</td><td>{restaurant.cuisine}</td><td>{restaurant.location}</td><td>{restaurant.active ? 'Active' : 'Inactive'}</td><td><button type="button" onClick={() => setRestaurantForm({ ...restaurant })}><FaEdit /> Edit</button> {restaurant.active && <button type="button" onClick={() => handleDeactivateRestaurant(restaurant)}><FaTimes /> Deactivate</button>}</td></tr>)}</tbody></table></div> : <p>No restaurants are configured for this property.</p>}
+        <div className="rest-admin-restaurant-list-header">
+          <div>
+            <h2 style={{ margin: 0 }}>Restaurant Directory</h2>
+            <p>{restaurants.length} restaurant{restaurants.length === 1 ? '' : 's'} configured for this property</p>
+          </div>
+          <div className="rest-admin-restaurant-filters">
+            <input aria-label="Search restaurants" className="rest-form-input" placeholder="Search restaurants" value={restaurantSearch} onChange={(event) => setRestaurantSearch(event.target.value)} />
+            <select aria-label="Filter restaurants by status" className="rest-form-select" value={restaurantStatusFilter} onChange={(event) => setRestaurantStatusFilter(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+        {loading ? <p>Loading restaurants…</p> : visibleRestaurants.length ? (
+          <div className="rest-admin-restaurant-grid">
+            {visibleRestaurants.map((restaurant) => (
+              <article className="rest-admin-restaurant-card" key={restaurant._id}>
+                {restaurant.heroImage || restaurant.featuredImage ? (
+                  <img className="rest-admin-restaurant-image" src={restaurant.heroImage || restaurant.featuredImage} alt={restaurant.name} />
+                ) : (
+                  <div className="rest-admin-restaurant-image-placeholder" aria-hidden="true"><FaUtensils /></div>
+                )}
+                <div className="rest-admin-restaurant-card-content">
+                  <div className="rest-admin-restaurant-card-heading">
+                    <div>
+                      <h3>{restaurant.name}</h3>
+                      <span>{restaurant.restaurantType || restaurant.cuisine || 'Restaurant'}</span>
+                    </div>
+                    <span className={`rest-admin-status ${restaurant.active === false ? 'inactive' : 'active'}`}>
+                      {restaurant.active === false ? 'Inactive' : 'Active'}
+                    </span>
+                  </div>
+                  <p className="rest-admin-restaurant-description">{restaurant.description || 'No restaurant description has been added.'}</p>
+                  <dl className="rest-admin-restaurant-meta">
+                    <div><dt>Location</dt><dd>{restaurant.location || '—'}</dd></div>
+                    <div><dt>Cuisine</dt><dd>{restaurant.cuisine || '—'}</dd></div>
+                    <div><dt>Operating hours</dt><dd>{restaurant.openingHours || 'Not specified'}</dd></div>
+                  </dl>
+                  <div className="rest-admin-restaurant-actions">
+                    <button type="button" onClick={() => setRestaurantDetails(restaurant)}><FaEye /> View</button>
+                    <button type="button" onClick={() => setRestaurantForm({ ...restaurant })}><FaEdit /> Edit</button>
+                    {restaurant.active === false ? (
+                      <button type="button" onClick={() => handleActivateRestaurant(restaurant)}><FaCheck /> Activate</button>
+                    ) : (
+                      <button type="button" className="danger" onClick={() => handleDeactivateRestaurant(restaurant)}><FaTimes /> Deactivate</button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : <p className="rest-admin-empty">{restaurants.length ? 'No restaurants match your search and status filters.' : 'No restaurants are configured for this property.'}</p>}
       </section>
+
+      {restaurantDetails && <div className="rest-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRestaurantDetails(null); }}>
+        <section className="rest-res-modal-panel rest-admin-restaurant-details" role="dialog" aria-modal="true" aria-labelledby="restaurant-details-title">
+          <button type="button" className="rest-modal-close-btn" aria-label="Close restaurant details" onClick={() => setRestaurantDetails(null)}><FaTimes /></button>
+          {restaurantDetails.heroImage || restaurantDetails.featuredImage ? <img src={restaurantDetails.heroImage || restaurantDetails.featuredImage} alt={restaurantDetails.name} /> : null}
+          <div className="rest-res-modal-body">
+            <span className={`rest-admin-status ${restaurantDetails.active === false ? 'inactive' : 'active'}`}>{restaurantDetails.active === false ? 'Inactive' : 'Active'}</span>
+            <h2 id="restaurant-details-title">{restaurantDetails.name}</h2>
+            <p>{restaurantDetails.description || 'No restaurant description has been added.'}</p>
+            <dl className="rest-admin-restaurant-meta">
+              <div><dt>Restaurant type</dt><dd>{restaurantDetails.restaurantType || restaurantDetails.cuisine || 'Not specified'}</dd></div>
+              <div><dt>Cuisine</dt><dd>{restaurantDetails.cuisine || '—'}</dd></div>
+              <div><dt>Location</dt><dd>{restaurantDetails.location || '—'}</dd></div>
+              <div><dt>Operating hours</dt><dd>{restaurantDetails.openingHours || 'Not specified'}</dd></div>
+              <div><dt>Contact</dt><dd>{restaurantDetails.contactPhone || '—'}{restaurantDetails.contactEmail ? ` · ${restaurantDetails.contactEmail}` : ''}</dd></div>
+            </dl>
+            <div className="rest-admin-restaurant-actions">
+              <button type="button" onClick={() => { setRestaurantForm({ ...restaurantDetails }); setRestaurantDetails(null); }}><FaEdit /> Edit</button>
+              {restaurantDetails.active === false
+                ? <button type="button" onClick={() => handleActivateRestaurant(restaurantDetails)}><FaCheck /> Activate</button>
+                : <button type="button" className="danger" onClick={() => handleDeactivateRestaurant(restaurantDetails)}><FaTimes /> Deactivate</button>}
+              <button type="button" onClick={() => setRestaurantDetails(null)}>Close</button>
+            </div>
+          </div>
+        </section>
+      </div>}
 
       {/* 2. Dashboard KPI Statistics (Requirement 21) */}
       {stats && (
@@ -399,6 +511,11 @@ const AdminRestaurants = () => {
          ============================================================ */}
       {activeTab === 'reservations' && (
         <div>
+          <div role="group" aria-label="Reservation category" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            {[['all', 'All Reservations'], ['table', 'Table Reservations'], ['experience', 'Dining Experiences']].map(([value, label]) => (
+              <button key={value} type="button" className={`rest-admin-tab-btn ${reservationCategory === value ? 'active' : ''}`} onClick={() => setReservationCategory(value)}>{label}</button>
+            ))}
+          </div>
           {/* Reservation Filter Controls */}
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             <input 
@@ -478,14 +595,31 @@ const AdminRestaurants = () => {
                       </td>
                       <td>{r.restaurant?.name || 'Restaurant'}</td>
                       <td>
-                        <div>{r.date}</div>
-                        <strong style={{ color: 'var(--c-brass)' }}>{r.time}</strong>
+                        <div>{r.date || 'Date unavailable'}</div>
+                        <strong style={{ color: 'var(--c-brass)' }}>{r.time || 'Start unavailable'}{r.endTime ? ` – ${r.endTime}` : ''}</strong>
                       </td>
                       <td>
                         <strong>{r.guestCount}</strong> guests
+                        {r.table?.tableNumber && <div style={{ fontSize: '0.76rem', color: 'var(--c-text-muted)' }}>Table {r.table.tableNumber}</div>}
+                        {r.savedReservationTotal != null ? (
+                          <div className="rest-admin-reservation-price">
+                            {r.pricingType === 'FIXED'
+                              ? <span>Fixed offer price: {r.savedReservationCurrency || 'LKR'} {Number(r.fixedPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              : r.pricingType === 'FREE'
+                                ? <span>Free offer</span>
+                                : r.pricePerGuest != null && <span>{r.savedReservationCurrency || 'LKR'} {Number(r.pricePerGuest || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / guest</span>}
+                            <small>{r.pricingSource === 'OFFER' ? `Dining offer${r.offerPricingType ? ` · ${r.offerPricingType === 'FIXED' ? 'fixed total' : r.offerPricingType === 'FREE' ? 'free' : 'per guest'}` : ''}` : r.pricingSource === 'BUFFET' ? 'Buffet pricing' : 'Restaurant table rate'}</small>
+                            <strong>{r.savedReservationCurrency || 'LKR'} {Number(r.savedReservationTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            <small>Paid: {r.savedReservationCurrency || 'LKR'} {Number(r.amountPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>
+                            <small>Outstanding: {r.savedReservationCurrency || 'LKR'} {Number(r.outstandingBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>
+                          </div>
+                        ) : (
+                          <div className="rest-admin-reservation-price"><strong>Price not recorded</strong><small>Historical price unavailable</small></div>
+                        )}
                       </td>
                       <td>
                         <div>{r.diningType}</div>
+                        {(r.offer?.title || r.offerTitle) && <div style={{ fontWeight: 600 }}>{r.offer?.title || r.offerTitle}{Number.isFinite(Number(r.offerPrice)) && <span> · {r.offerCurrency || 'LKR'} {Number(r.offerPrice).toLocaleString()}</span>}</div>}
                         <span style={{ fontSize: '0.76rem', color: 'var(--c-text-muted)' }}>
                           {r.seatingPreference} &bull; {r.guestType}
                         </span>
@@ -499,22 +633,32 @@ const AdminRestaurants = () => {
                         <span className={`rest-status-badge ${r.status?.toLowerCase()}`}>
                           {r.status}
                         </span>
+                        <div style={{ marginTop: '0.35rem', fontSize: '0.76rem', color: 'var(--c-text-muted)' }}>
+                          Payment: <strong>{r.paymentStatus || 'Unpaid'}</strong>
+                        </div>
                       </td>
                       <td>
                         {r.guestType === 'Hotel Guest' && r.hotelReservation ? (
                           r.billedToFolio ? (
                             <span style={{ color: '#2E7D32', fontSize: '0.78rem', fontWeight: 600 }}>
-                              ✓ Billed: LKR {r.totalAmount?.toLocaleString()}
+                              ✓ Billed: {r.savedReservationCurrency || r.reservationPriceCurrency || r.currency || 'LKR'} {Number(r.savedReservationTotal ?? r.totalAmount ?? 0).toLocaleString()}
                             </span>
-                          ) : (
+                          ) : r.savedReservationTotal != null ? (
                             <button
                               type="button"
                               className="rest-btn-secondary"
                               style={{ padding: '0.35rem 0.65rem', fontSize: '0.74rem', color: 'var(--c-forest-deep)' }}
-                              onClick={() => setFolioModalRes(r)}
+                              onClick={() => {
+                                setFolioModalRes(r);
+                                setChargeAmount(r.savedReservationTotal != null ? String(r.savedReservationTotal) : '');
+                              }}
                             >
                               <FaFileInvoiceDollar /> Charge Room
                             </button>
+                          ) : (
+                            <span style={{ color: '#A3362D', fontSize: '0.74rem', fontWeight: 600 }}>
+                              Historical price unavailable
+                            </span>
                           )
                         ) : (
                           <span style={{ fontSize: '0.74rem', color: 'var(--c-text-muted)' }}>
@@ -765,7 +909,7 @@ const AdminRestaurants = () => {
               </div>
 
               <div className="rest-form-group">
-                <label className="rest-form-label">Total Bill Amount (LKR) *</label>
+                <label className="rest-form-label">Saved Reservation Total ({folioModalRes.savedReservationCurrency || folioModalRes.reservationPriceCurrency || 'LKR'}) *</label>
                 <input 
                   type="number"
                   min="1"
@@ -773,7 +917,7 @@ const AdminRestaurants = () => {
                   className="rest-form-input"
                   placeholder="e.g. 18500"
                   value={chargeAmount}
-                  onChange={(e) => setChargeAmount(e.target.value)}
+                  readOnly
                   required
                 />
               </div>
@@ -811,7 +955,7 @@ const AdminRestaurants = () => {
         </div>
       )}
 
-      {restaurantForm && <div className="rest-modal-backdrop" role="presentation"><form className="rest-res-modal-panel" onSubmit={handleSaveRestaurant}><div className="rest-res-modal-header"><h2>{restaurantForm._id ? 'Edit Restaurant' : 'Add Restaurant'}</h2></div><div className="rest-res-modal-body"><label className="rest-form-group">Name<input className="rest-form-input" required value={restaurantForm.name} onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })} /></label><label className="rest-form-group">Cuisine<input className="rest-form-input" required value={restaurantForm.cuisine} onChange={(e) => setRestaurantForm({ ...restaurantForm, cuisine: e.target.value })} /></label><label className="rest-form-group">Location<input className="rest-form-input" required value={restaurantForm.location} onChange={(e) => setRestaurantForm({ ...restaurantForm, location: e.target.value })} /></label><label className="rest-form-group">Opening hours<input className="rest-form-input" required value={restaurantForm.openingHours} onChange={(e) => setRestaurantForm({ ...restaurantForm, openingHours: e.target.value })} /></label><label className="rest-form-group">Capacity<input className="rest-form-input" type="number" min="1" required value={restaurantForm.capacity} onChange={(e) => setRestaurantForm({ ...restaurantForm, capacity: e.target.value })} /></label><label className="rest-form-group">Contact phone<input className="rest-form-input" value={restaurantForm.contactPhone || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, contactPhone: e.target.value })} /></label><label className="rest-form-group">Contact email<input className="rest-form-input" type="email" value={restaurantForm.contactEmail || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, contactEmail: e.target.value })} /></label><label className="rest-form-group">Description<textarea className="rest-form-input" value={restaurantForm.description || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, description: e.target.value })} /></label><label className="rest-form-group">Image URL<input className="rest-form-input" type="url" value={restaurantForm.heroImage || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, heroImage: e.target.value })} /></label><div><button className="btn btn-primary" disabled={savingRestaurant}>{savingRestaurant ? 'Saving…' : 'Save Restaurant'}</button> <button type="button" className="btn btn-secondary" onClick={() => setRestaurantForm(null)}>Cancel</button></div></div></form></div>}
+      {restaurantForm && <div className="rest-modal-backdrop" role="presentation"><form className="rest-res-modal-panel" onSubmit={handleSaveRestaurant}><div className="rest-res-modal-header"><h2>{restaurantForm._id ? 'Edit Restaurant' : 'Add Restaurant'}</h2></div><div className="rest-res-modal-body"><label className="rest-form-group">Name<input className="rest-form-input" required value={restaurantForm.name || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })} /></label><label className="rest-form-group">Cuisine<input className="rest-form-input" required value={restaurantForm.cuisine || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, cuisine: e.target.value })} /></label><label className="rest-form-group">Restaurant type<select className="rest-form-select" value={restaurantForm.restaurantType || 'Fine Dining'} onChange={(e) => setRestaurantForm({ ...restaurantForm, restaurantType: e.target.value })}><option>Fine Dining</option><option>All-Day Dining</option><option>Bistro</option><option>Lounge</option><option>Bar &amp; Grill</option></select></label><label className="rest-form-group">Location<input className="rest-form-input" required value={restaurantForm.location || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, location: e.target.value })} /></label><label className="rest-form-group">Opening hours<input className="rest-form-input" required value={restaurantForm.openingHours || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, openingHours: e.target.value })} /></label><label className="rest-form-group">Capacity<input className="rest-form-input" type="number" min="1" required value={restaurantForm.capacity} onChange={(e) => setRestaurantForm({ ...restaurantForm, capacity: e.target.value })} /></label><label className="rest-form-group">Table reservation rate per guest<input className="rest-form-input" type="number" min="0" step="0.01" value={restaurantForm.reservationPricePerGuest ?? 0} onChange={(e) => setRestaurantForm({ ...restaurantForm, reservationPricePerGuest: e.target.value })} /><small>Applies when a buffet or bookable offer does not define its own per-guest price. Existing bookings keep their saved price.</small></label><label className="rest-form-group">Reservation currency<input className="rest-form-input" maxLength="3" minLength="3" value={restaurantForm.reservationPriceCurrency || 'LKR'} onChange={(e) => setRestaurantForm({ ...restaurantForm, reservationPriceCurrency: e.target.value.toUpperCase() })} required /></label><label className="rest-form-group">Contact phone<input className="rest-form-input" value={restaurantForm.contactPhone || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, contactPhone: e.target.value })} /></label><label className="rest-form-group">Contact email<input className="rest-form-input" type="email" value={restaurantForm.contactEmail || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, contactEmail: e.target.value })} /></label><label className="rest-form-group">Description<textarea className="rest-form-input" value={restaurantForm.description || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, description: e.target.value })} /></label><label className="rest-form-group">Image URL<input className="rest-form-input" type="url" value={restaurantForm.heroImage || ''} onChange={(e) => setRestaurantForm({ ...restaurantForm, heroImage: e.target.value })} /></label><div><button className="btn btn-primary" disabled={savingRestaurant}>{savingRestaurant ? 'Saving…' : 'Save Restaurant'}</button> <button type="button" className="btn btn-secondary" onClick={() => setRestaurantForm(null)}>Cancel</button></div></div></form></div>}
 
       {/* ============================================================
          ADD TABLE MODAL

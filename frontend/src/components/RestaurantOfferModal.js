@@ -2,7 +2,7 @@
 import React from 'react';
 import { FaTimes, FaCheck, FaCalendarAlt, FaTag, FaClock, FaMapMarkerAlt, FaUtensils } from 'react-icons/fa';
 
-const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaurantInfo }) => {
+const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaurantInfo, allowPromotionalReservation = false }) => {
   if (!isOpen || !offer) return null;
 
   const offerRestaurant = typeof offer.restaurant === 'object' ? offer.restaurant : null;
@@ -11,7 +11,8 @@ const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaura
   const offerTime = offer.time || [offer.startTime, offer.endTime].filter(Boolean).join(' – ');
   const offerDate = offer.date || offer.eventDate || offer.validFrom;
   const offerDateLabel = offerDate ? (() => { const date = new Date(offerDate); return Number.isNaN(date.getTime()) ? String(offerDate) : date.toLocaleDateString(); })() : '';
-  const offerPrice = Number(offer.price);
+  const offerPricingType = offer.pricingType || 'PER_GUEST';
+  const offerPrice = Number(offerPricingType === 'FIXED' ? offer.fixedPrice ?? offer.price : offerPricingType === 'FREE' ? 0 : offer.pricePerGuest ?? offer.price);
   const experienceType = offer.experienceType;
   const suitableFor = offer.suitableFor || offer.occasion;
   const highlightItems = offer.highlights || offer.inclusions;
@@ -21,7 +22,7 @@ const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaura
     : offer.availability && typeof offer.availability === 'object' ? Object.values(offer.availability).filter((value) => typeof value === 'string' || typeof value === 'number').join(', ') : '';
 
   const handleReserveClick = () => {
-    if (offer.frontendOnly) return;
+    if (offer.frontendOnly && !allowPromotionalReservation) return;
     onClose();
     if (onReserveOffer) {
       onReserveOffer(offer);
@@ -75,13 +76,14 @@ const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaura
             {offer.title}
           </h2>
 
-          {offerPrice > 0 && (
+          {offerPricingType === 'FREE' ? (
+            <div className="rest-offer-modal-price-on-request">Free dining offer</div>
+          ) : offerPrice >= 0 && Number.isFinite(offerPrice) ? (
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--c-brass)', marginBottom: '1.25rem' }}>
-              From {offer.currency || 'LKR'} {offerPrice.toLocaleString()}
-              <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--c-text-muted)', marginLeft: '0.5rem' }}>
-                per couple / experience
-              </span>
+              {offerPricingType === 'FIXED' ? 'Fixed price' : 'Per guest'}: {offer.currency || 'LKR'} {offerPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
+          ) : (
+            <div className="rest-offer-modal-price-on-request">Price on request</div>
           )}
 
           <p style={{ fontSize: '1rem', color: 'var(--c-text-secondary)', lineHeight: 1.7, marginBottom: '1.5rem' }}>
@@ -140,6 +142,12 @@ const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaura
             </p>
           )}
 
+          {offer.frontendOnly && allowPromotionalReservation && (
+            <p className="rest-experience-booking-note">
+              This request reserves a dining table and records your selected experience request. The experience itself, its availability, and any final price must be confirmed by the dining team.
+            </p>
+          )}
+
           {/* Action CTAs */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
             <button 
@@ -150,7 +158,7 @@ const RestaurantOfferModal = ({ isOpen, onClose, offer, onReserveOffer, restaura
             >
               Close
             </button>
-            {!offer.frontendOnly && (
+            {(!offer.frontendOnly || allowPromotionalReservation) && (
               <button
                 type="button"
                 className="rest-btn-primary"

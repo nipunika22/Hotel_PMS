@@ -112,6 +112,7 @@ const Events = () => {
     catering: '',
     decorations: '',
     equipment: '',
+    selectedServices: [],
     notes: ''
   });
 
@@ -139,6 +140,19 @@ const Events = () => {
   }, [hall]);
 
   const packages = hall?.packages || [];
+  const activeServices = (hall?.additionalServices || []).filter((service) => service.isActive !== false);
+  const selectedPackage = packages.find((pkg) => pkg.name === form.package && pkg.isActive !== false);
+  const selectedServiceRecords = activeServices.filter((service) => form.selectedServices.includes(service.name));
+  const baseEstimate = selectedPackage
+    ? 0
+    : (Number(hall?.basePrice) || 0);
+  const packageEstimate = selectedPackage ? (Number(selectedPackage.price) || 0) : 0;
+  const servicesEstimate = selectedServiceRecords.reduce((sum, service) => sum + (Number(service.price) || 0), 0);
+  const estimatedEventPrice = baseEstimate + packageEstimate + servicesEstimate;
+  const estimateCurrency = selectedPackage?.currency
+    || selectedServiceRecords.find((service) => service.currency)?.currency
+    || hall?.currency
+    || 'LKR';
 
   const matching = useMemo(
     () =>
@@ -177,7 +191,6 @@ const Events = () => {
       e.guests = 'Guest count is below the venue minimum.';
     else if (hall && Number(form.guests) > hall.max) e.guests = 'Guest count exceeds the venue maximum.';
     if (!form.seating) e.seating = 'Select a seating arrangement.';
-    if (!form.package && packages.length > 0) e.package = 'Choose a package.';
     setErrors(e);
     return !Object.keys(e).length;
   };
@@ -204,11 +217,24 @@ const Events = () => {
         catering: form.catering,
         decorations: form.decorations,
         equipment: form.equipment,
+        selectedServices: form.selectedServices,
         notes: form.notes,
         hall: hall?.slug || hall?.id || form.hall,
         hotel: hall?.hotel || form.hotel
       };
 
+      if (hall) {
+        const availability = await eventAPI.checkAvailability({
+          venueId: hall._id || hall.id,
+          date: form.date,
+          startTime: form.start,
+          endTime: form.end
+        });
+        if (availability.data?.available === false) {
+          setSubmitError(availability.data?.message || 'The venue is unavailable for the selected date and time.');
+          return;
+        }
+      }
       const res = await eventAPI.createBooking(payload);
       setSubmittedBooking(res.data?.booking || payload);
       setSubmitted(true);
@@ -524,7 +550,7 @@ const Events = () => {
                     Selected package
                     <select name="package" value={form.package} onChange={change}>
                       <option value="">Choose a package</option>
-                      {packages.map((p) => (
+                      {packages.filter((pkg) => pkg.isActive !== false).map((p) => (
                         <option key={p.name} value={p.name}>
                           {p.name} {p.price ? `(Rs. ${Number(p.price).toLocaleString()})` : ''}
                         </option>
@@ -533,6 +559,42 @@ const Events = () => {
                     </select>
                     {errors.package && <small>{errors.package}</small>}
                   </label>
+                </div>
+                {activeServices.length > 0 && (
+                  <div className="events-field-wide" style={{ marginBottom: '1rem' }}>
+                    <span style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 700 }}>Additional services</span>
+                    <div style={{ display: 'grid', gap: '0.5rem' }}>
+                      {activeServices.map((service) => (
+                        <label key={service.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0.75rem' }}>
+                          <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={form.selectedServices.includes(service.name)}
+                              onChange={(event) => setForm((previous) => ({
+                                ...previous,
+                                selectedServices: event.target.checked
+                                  ? [...previous.selectedServices, service.name]
+                                  : previous.selectedServices.filter((name) => name !== service.name)
+                              }))}
+                            />
+                            {service.name}
+                          </span>
+                          <strong>{service.currency || 'LKR'} {Number(service.price || 0).toLocaleString()}</strong>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="events-detail-grid" style={{ gridTemplateColumns: '1fr', marginBottom: '1rem' }}>
+                  <aside style={{ padding: '1rem', border: '1px solid #E2E8F0', borderRadius: '8px', background: '#F8FAFC' }}>
+                    <span style={{ display: 'block', color: '#64748B', fontSize: '0.78rem', textTransform: 'uppercase', fontWeight: 700 }}>Estimated event price</span>
+                    <strong style={{ display: 'block', color: 'var(--c-brass, #B68C48)', fontSize: '1.35rem', marginTop: '0.25rem' }}>
+                      {estimateCurrency} {estimatedEventPrice.toLocaleString()}
+                    </strong>
+                    <small style={{ color: '#64748B' }}>
+                      Base: {estimateCurrency} {baseEstimate.toLocaleString()} · Package: {estimateCurrency} {packageEstimate.toLocaleString()} · Services: {estimateCurrency} {servicesEstimate.toLocaleString()}
+                    </small>
+                  </aside>
                 </div>
                 <h2>Additional requirements</h2>
                 <div className="events-form-grid">
@@ -674,7 +736,7 @@ const Events = () => {
                 <aside className="events-packages">
                   <span className="events-eyebrow dark">THOUGHTFUL TOUCHES</span>
                   <h2>Event packages</h2>
-                  {(hall.packages || []).map((p) => (
+                  {(hall.packages || []).filter((p) => p.isActive !== false).map((p) => (
                     <div className="events-package" key={p.name}>
                       <span>{p.event}</span>
                       <h3>{p.name}</h3>

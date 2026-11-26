@@ -3,12 +3,13 @@ const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
-process.env.USE_IN_MEMORY_DB = "true";
-process.env.MONGOMS_DOWNLOAD_DIR = "D:\\mongodb-binaries";
-
-const connectDB = require("../config/db");
+const { MongoMemoryReplSet } = require("mongodb-memory-server");
+// Prevent server.js dotenv/optional Vercel wiring from ever discovering the
+// configured Atlas URI during this test process. The only connection below is
+// created explicitly from MongoMemoryReplSet.
+delete process.env.VERCEL;
+process.env.NODE_ENV = "test";
+process.env.MONGO_URI = "";
 const app = require("../server");
 const HotelChain = require("../models/HotelChain");
 const Property = require("../models/Property");
@@ -19,6 +20,7 @@ const EventBooking = require("../models/EventBooking");
 
 let server = null;
 let BASE_URL = "";
+let mongo = null;
 
 let chainId = null;
 let propAId = null;
@@ -37,10 +39,10 @@ let draftEventPropA = null;
 
 describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () => {
   before(async () => {
-    // 1. Connect DB safely
-    if (mongoose.connection.readyState !== 1) {
-      await connectDB();
-    }
+    // Explicit test-only replica set. Never call backend/config/db.js here:
+    // it reads backend/.env and targets the configured Atlas database.
+    mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    await mongoose.connect(mongo.getUri("hotel_pms_test"), { dbName: "hotel_pms_test" });
 
     // 2. Start ephemeral test server
     await new Promise((resolve) => {
@@ -224,9 +226,7 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
     }
-    if (typeof connectDB.stopDB === "function") {
-      await connectDB.stopDB();
-    }
+    if (mongo) await mongo.stop();
   });
 
   // =========================================================================
@@ -285,6 +285,8 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
 
   let createdBookingRef = "";
   let createdBookingId = "";
+const FUTURE_TEST_DATE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const SECOND_FUTURE_TEST_DATE = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   it("6. Customer booking/enquiry creation: validates inputs and returns EVT reference", async () => {
     const payload = {
@@ -293,7 +295,7 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
       phone: "+94 77 123 4567",
       category: "weddings",
       venue: testVenuePropA._id.toString(),
-      date: "2026-11-25",
+      date: FUTURE_TEST_DATE,
       start: "18:00",
       end: "22:00",
       guests: 150,
@@ -318,6 +320,12 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     assert.strictEqual(data.booking.status, "PENDING");
     assert.strictEqual(data.booking.guestCount, 150);
     assert.strictEqual(data.booking.estimatedPrice, 600000);
+
+    const pendingAvailability = await fetch(`${BASE_URL}/events/availability?venueId=${testVenuePropA._id}&date=${FUTURE_TEST_DATE}&startTime=18:00&endTime=22:00&propertyId=${propAId}`);
+    assert.strictEqual(pendingAvailability.status, 200);
+    assert.strictEqual((await pendingAvailability.json()).available, true, "pending requests do not block availability");
+    const malformedAvailability = await fetch(`${BASE_URL}/events/availability?venueId=${testVenuePropA._id}&date=2026-02-30&startTime=18:00&endTime=22:00&propertyId=${propAId}`);
+    assert.strictEqual(malformedAvailability.status, 400);
 
     createdBookingRef = data.booking.confirmationNumber;
     createdBookingId = data.booking._id;
@@ -352,7 +360,7 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
       email: "event_cust@example.com",
       phone: "+94 77 123 4567",
       category: "corporate",
-      date: "2026-11-25",
+      date: FUTURE_TEST_DATE,
       start: "18:00",
       end: "16:00", // Invalid!
       guests: 50
@@ -374,7 +382,7 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
       phone: "+94 77 123 4567",
       category: "weddings",
       venue: testVenuePropA._id.toString(),
-      date: "2026-11-25",
+      date: FUTURE_TEST_DATE,
       start: "18:00",
       end: "22:00",
       guests: 500 // Max is 400!
@@ -491,31 +499,47 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     const data = await res.json();
     assert.strictEqual(data.booking.status, "CONFIRMED");
     assert.ok(data.booking.confirmedAt);
+    const occupiedAvailability = await fetch(`${BASE_URL}/events/availability?venueId=${testVenuePropA._id}&date=${FUTURE_TEST_DATE}&startTime=18:30&endTime=19:30&propertyId=${propAId}`);
+    assert.strictEqual(occupiedAvailability.status, 200);
+    assert.strictEqual((await occupiedAvailability.json()).available, false, "confirmed bookings block overlapping availability");
+    const differentVenueAvailability = await fetch(`${BASE_URL}/events/availability?venueId=${testVenuePropB._id}&date=${FUTURE_TEST_DATE}&startTime=18:30&endTime=19:30&propertyId=${propBId}`);
+    assert.strictEqual(differentVenueAvailability.status, 200);
+    assert.strictEqual((await differentVenueAvailability.json()).available, true, "a booking in another venue does not block this venue");
+  });
+
+  it("17b. Rejected and cancelled bookings do not block availability", async () => {
+    await EventBooking.create([
+      { property: propAId, venue: testVenuePropA._id, customerName: "Rejected Test", email: "rejected@example.com", phone: "+94 77 111 1111", eventType: "corporate", date: SECOND_FUTURE_TEST_DATE, startTime: "10:00", endTime: "12:00", guestCount: 60, status: "REJECTED" },
+      { property: propAId, venue: testVenuePropA._id, customerName: "Cancelled Test", email: "cancelled@example.com", phone: "+94 77 222 2222", eventType: "corporate", date: SECOND_FUTURE_TEST_DATE, startTime: "12:00", endTime: "14:00", guestCount: 60, status: "CANCELLED" }
+    ]);
+    const response = await fetch(`${BASE_URL}/events/availability?venueId=${testVenuePropA._id}&date=${SECOND_FUTURE_TEST_DATE}&startTime=10:00&endTime=14:00&propertyId=${propAId}`);
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual((await response.json()).available, true);
   });
 
   it("18. Conflict prevention: Second booking overlapping confirmed time window is rejected upon confirmation (409)", async () => {
-    // Booking 1 is confirmed for 2026-11-25, 18:00 - 22:00 at Grand Lotus Ballroom.
-    // Booking 2 requests 2026-11-25, 19:00 - 21:00 at the same venue.
+    // Booking 1 is confirmed for FUTURE_TEST_DATE, 18:00 - 22:00 at Grand Lotus Ballroom.
+    // Booking 2 requests the same date, 19:00 - 21:00 at the same venue.
     const payload = {
       name: "Kasun Perera",
       email: "event_cust2@example.com",
       phone: "+94 77 987 6543",
       category: "corporate",
       venue: testVenuePropA._id.toString(),
-      date: "2026-11-25",
+      date: FUTURE_TEST_DATE,
       start: "19:00",
       end: "21:00",
       guests: 80
     };
 
-    // Customer can submit pending enquiry
-    const createRes = await fetch(`${BASE_URL}/events/bookings?propertyId=${propAId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+    // Seed a pending request directly so this specifically tests the admin
+    // confirmation recheck after an existing confirmed booking is present.
+    const secondBooking = await EventBooking.create({
+      property: propAId, venue: testVenuePropA._id, customerName: payload.name,
+      email: payload.email, phone: payload.phone, eventType: payload.category,
+      date: FUTURE_TEST_DATE, startTime: payload.start, endTime: payload.end,
+      guestCount: payload.guests, status: "PENDING"
     });
-    assert.strictEqual(createRes.status, 201);
-    const secondBooking = (await createRes.json()).booking;
 
     // When staff tries to CONFIRM this overlapping booking, system MUST reject with 409 Conflict!
     const confirmRes = await fetch(`${BASE_URL}/events/admin/bookings/${secondBooking._id}/status?propertyId=${propAId}`, {
@@ -530,6 +554,30 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     assert.strictEqual(confirmRes.status, 409);
     const confirmData = await confirmRes.json();
     assert.ok(confirmData.error.includes("Conflicting confirmed booking"));
+  });
+
+  it("18b. Concurrent confirmation requests cannot confirm overlapping bookings", async () => {
+    const createPending = async (email, start, end) => {
+      const response = await fetch(`${BASE_URL}/events/bookings?propertyId=${propAId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Concurrent Schedule Test", email, phone: "+94 77 123 4567", category: "corporate",
+          venue: testVenuePropA._id.toString(), date: FUTURE_TEST_DATE, start, end, guests: 60
+        })
+      });
+      assert.strictEqual(response.status, 201);
+      return (await response.json()).booking;
+    };
+    const first = await createPending("parallel-one@example.com", "09:00", "11:00");
+    const second = await createPending("parallel-two@example.com", "10:00", "12:00");
+    const confirm = (booking) => fetch(`${BASE_URL}/events/admin/bookings/${booking._id}/status?propertyId=${propAId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${propAStaffToken}` },
+      body: JSON.stringify({ status: "CONFIRMED" })
+    });
+    const responses = await Promise.all([confirm(first), confirm(second)]);
+    assert.deepStrictEqual(responses.map((response) => response.status).sort(), [200, 409]);
   });
 
   // =========================================================================
@@ -559,6 +607,27 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     const venues = await res.json();
     const hasOceanBreeze = venues.some((v) => v.slug === "ocean-breeze-pavilion");
     assert.strictEqual(hasOceanBreeze, false);
+  });
+
+  it("20b. Department Admin schedule access is limited to assigned property and Event permission", async () => {
+    const deptAdmin = await User.create({
+      name: "Events Department Admin", email: "events_dept_admin@example.com", password: "Password123!",
+      phone: "+94 77 555 6666", role: "admin", departmentAdmin: true,
+      adminDepartments: ["events"], property: propAId, allowedProperties: [propAId]
+    });
+    const token = jwt.sign({ id: deptAdmin._id }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "1d" });
+    const allowed = await fetch(`${BASE_URL}/events/admin/bookings?propertyId=${propAId}`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.strictEqual(allowed.status, 200);
+    const denied = await fetch(`${BASE_URL}/events/admin/bookings?propertyId=${propBId}`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.strictEqual(denied.status, 403);
+    const unassignedDeptAdmin = await User.create({
+      name: "Unassigned Department Admin", email: "other_dept_admin@example.com", password: "Password123!",
+      phone: "+94 77 555 7777", role: "admin", departmentAdmin: true,
+      adminDepartments: ["rooms"], property: propAId, allowedProperties: [propAId]
+    });
+    const deniedToken = jwt.sign({ id: unassignedDeptAdmin._id }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "1d" });
+    const departmentDenied = await fetch(`${BASE_URL}/events/admin/bookings?propertyId=${propAId}`, { headers: { Authorization: `Bearer ${deniedToken}` } });
+    assert.strictEqual(departmentDenied.status, 403);
   });
 
   it("21. Inactive venue cannot receive new confirmed bookings", async () => {
@@ -760,6 +829,17 @@ describe("EVENT MANAGEMENT MODULE — Automated Comprehensive Test Suite", () =>
     assert.ok(Array.isArray(list));
     assert.ok(list.length >= 1);
     assert.ok(list.some((b) => b.customerName === "Amara Silva"));
+
+    const rangeRes = await fetch(`${BASE_URL}/events/admin/bookings?dateFrom=${FUTURE_TEST_DATE}&dateTo=${FUTURE_TEST_DATE}&propertyId=${propAId}`, {
+      headers: { Authorization: `Bearer ${propAStaffToken}` }
+    });
+    assert.strictEqual(rangeRes.status, 200);
+    const rangeBookings = await rangeRes.json();
+    assert.ok(rangeBookings.every((booking) => booking.date === FUTURE_TEST_DATE));
+    const invalidRangeRes = await fetch(`${BASE_URL}/events/admin/bookings?dateFrom=2026-02-30&propertyId=${propAId}`, {
+      headers: { Authorization: `Bearer ${propAStaffToken}` }
+    });
+    assert.strictEqual(invalidRangeRes.status, 400);
   });
 
   it("26. Historical bookings survive event archiving", async () => {

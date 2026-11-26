@@ -43,6 +43,19 @@ const restaurantOfferSchema = new mongoose.Schema({
     type: Number,
     min: 0
   },
+  pricingType: {
+    type: String,
+    enum: ["PER_GUEST", "FIXED", "FREE"],
+    default: "PER_GUEST"
+  },
+  pricePerGuest: {
+    type: Number,
+    min: 0
+  },
+  fixedPrice: {
+    type: Number,
+    min: 0
+  },
   discount: {
     type: String,
     trim: true,
@@ -52,7 +65,10 @@ const restaurantOfferSchema = new mongoose.Schema({
     type: String,
     default: "LKR",
     uppercase: true,
-    trim: true
+    trim: true,
+    minlength: 3,
+    maxlength: 3,
+    match: /^[A-Z]{3}$/
   },
   validFrom: {
     type: Date,

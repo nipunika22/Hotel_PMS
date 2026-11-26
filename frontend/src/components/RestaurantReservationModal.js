@@ -20,6 +20,7 @@ import { restaurantAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import { format, addDays } from 'date-fns';
+import { calculateDiningPrice, isGuestCountWithinCapacity } from '../config/diningPricing';
 
 
 const SEATING_OPTIONS = [
@@ -51,6 +52,7 @@ const RestaurantReservationModal = ({
   preselectedDiningType = 'À la carte',
   preselectedBuffetId = null,
   preselectedOfferId = null,
+  preselectedExperience = null,
   restaurantsList = EMPTY_RESTAURANTS
 }) => {
   const [restaurants, setRestaurants] = useState(Array.isArray(restaurantsList) ? restaurantsList : []);
@@ -62,6 +64,11 @@ const RestaurantReservationModal = ({
   const [date, setDate] = useState(() => format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [time, setTime] = useState('19:30');
   const [guestCount, setGuestCount] = useState(2);
+  const [pricingRestaurant, setPricingRestaurant] = useState(null);
+  const [pricingBuffet, setPricingBuffet] = useState(null);
+  const [pricingOffer, setPricingOffer] = useState(null);
+  const [pricingPackageLoading, setPricingPackageLoading] = useState(false);
+  const [pricingPackageError, setPricingPackageError] = useState('');
   const [seatingPreference, setSeatingPreference] = useState('Any');
   const [diningType, setDiningType] = useState(preselectedDiningType);
   const [occasion, setOccasion] = useState('Casual Dining');
@@ -76,6 +83,18 @@ const RestaurantReservationModal = ({
   const [phone, setPhone] = useState(() => (user?.phone || ''));
   const [roomNumber, setRoomNumber] = useState('');
   const [hotelReservationId, setHotelReservationId] = useState(null);
+  const isFrontendOnlyExperience = Boolean(preselectedExperience?.frontendOnly);
+
+  const selectedRestaurant = pricingRestaurant || restaurants.find((restaurant) => String(restaurant._id) === String(selectedRestaurantId)) || preselectedRestaurant;
+  const restaurantMaxPartySize = Number(selectedRestaurant?.maxPartySize || selectedRestaurant?.capacity || 30);
+  const maxPartySize = pricingBuffet?.capacity
+    ? Math.min(restaurantMaxPartySize, Number(pricingBuffet.capacity))
+    : restaurantMaxPartySize;
+  const guestCountValid = isGuestCountWithinCapacity(guestCount, maxPartySize);
+  const selectedPricingOffer = pricingOffer || (preselectedOfferId && !isFrontendOnlyExperience ? preselectedExperience : null);
+  const priceBreakdown = calculateDiningPrice({ restaurant: selectedRestaurant, buffet: pricingBuffet, offer: selectedPricingOffer, guestType, guestCount: Number(guestCount || 0) });
+  const { pricePerGuest, pricingType, pricingSource, fixedPrice, currency: reservationPriceCurrency, totalPrice: reservationTotalPrice } = priceBreakdown;
+  const formatPrice = (amount, currency) => `${currency} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // Sync user details if user logs in or changes
   useEffect(() => {
@@ -123,6 +142,44 @@ const RestaurantReservationModal = ({
     }
   }, [preselectedRestaurant, preselectedDiningType]);
 
+  useEffect(() => {
+    let active = true;
+    const canLoadCurrentPricing = Boolean(isOpen && selectedRestaurantId);
+    const needsPackagePrice = Boolean(preselectedBuffetId || (preselectedOfferId && !isFrontendOnlyExperience));
+    setPricingPackageLoading(canLoadCurrentPricing);
+    setPricingRestaurant(null);
+    setPricingBuffet(null);
+    setPricingOffer(null);
+    setPricingPackageError('');
+    if (!canLoadCurrentPricing) return () => { active = false; };
+    const loadSelectedPackage = async () => {
+      try {
+        const restaurantResponse = await restaurantAPI.getRestaurantBySlug(selectedRestaurantId);
+        const currentRestaurant = restaurantResponse.data?.data;
+        if (!currentRestaurant) throw new Error('Current restaurant pricing is unavailable.');
+        if (active) setPricingRestaurant(currentRestaurant);
+        if (needsPackagePrice) {
+          if (preselectedBuffetId) {
+            const buffet = currentRestaurant.buffets?.find((item) => String(item._id) === String(preselectedBuffetId));
+            if (!buffet) throw new Error('The selected buffet price is unavailable.');
+            if (active) setPricingBuffet(buffet);
+          }
+          if (preselectedOfferId && !isFrontendOnlyExperience) {
+            const offer = currentRestaurant.offers?.find((item) => String(item._id) === String(preselectedOfferId));
+            if (!offer) throw new Error('The selected dining offer price is unavailable.');
+            if (active) setPricingOffer(offer);
+          }
+        }
+      } catch (error) {
+        if (active) setPricingPackageError(error.message || 'Could not load the selected package price.');
+      } finally {
+        if (active) setPricingPackageLoading(false);
+      }
+    };
+    if (canLoadCurrentPricing) loadSelectedPackage();
+    return () => { active = false; };
+  }, [isOpen, selectedRestaurantId, preselectedBuffetId, preselectedOfferId, isFrontendOnlyExperience]);
+
   const loadRestaurants = async () => {
     try {
       setLoadingRestaurants(true);
@@ -157,6 +214,10 @@ const RestaurantReservationModal = ({
   // Check table availability on date/time/guest count changes
   useEffect(() => {
     if (!selectedRestaurantId || !date || !time) return;
+    if (!guestCountValid) {
+      setAvailabilityData({ success: true, available: false, partySizeSupported: false, maxPartySize });
+      return;
+    }
 
     let isMounted = true;
     const checkSlot = async () => {
@@ -183,7 +244,7 @@ const RestaurantReservationModal = ({
       isMounted = false;
       clearTimeout(timeout);
     };
-  }, [selectedRestaurantId, date, time, guestCount, seatingPreference]);
+  }, [selectedRestaurantId, date, time, guestCount, seatingPreference, guestCountValid, maxPartySize]);
 
   // Hotel Stay Lookup handler
   const handleHotelStayLookup = async (e) => {
@@ -223,6 +284,15 @@ const RestaurantReservationModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!guestCountValid) {
+      toast.error(`Choose between 1 and ${maxPartySize} guests for this restaurant.`);
+      return;
+    }
+    if (pricingPackageLoading || pricingPackageError) {
+      toast.error(pricingPackageError || 'Please wait while the selected dining price loads.');
+      return;
+    }
+
     if (!customerName || !email || !phone) {
       toast.error('Please provide your name, email, and phone number');
       return;
@@ -230,6 +300,9 @@ const RestaurantReservationModal = ({
 
     try {
       setSubmitting(true);
+      const experienceRequest = preselectedExperience?.frontendOnly
+        ? `Experience request: ${preselectedExperience.title}. This dining reservation does not confirm the experience or its final price.`
+        : '';
       const payload = {
         guestType,
         hotelReservationId: guestType === 'Hotel Guest' ? hotelReservationId : undefined,
@@ -245,7 +318,7 @@ const RestaurantReservationModal = ({
         buffetSessionId: preselectedBuffetId || undefined,
         offerId: preselectedOfferId || undefined,
         occasion,
-        specialRequests
+        specialRequests: [experienceRequest, specialRequests.trim()].filter(Boolean).join('\n')
       };
 
       const res = await restaurantAPI.createReservation(selectedRestaurantId, payload);
@@ -335,6 +408,18 @@ const RestaurantReservationModal = ({
               We look forward to welcoming you for an exceptional culinary journey.
             </p>
 
+            {preselectedExperience && (
+              <div className="rest-res-experience-summary">
+                <span className="rest-res-experience-label">Experience requested</span>
+                <strong>{preselectedExperience.title}</strong>
+                {preselectedExperience.frontendOnly && (
+                  <p role="note">
+                    Your table is reserved. The requested experience, its availability, and final price still require confirmation by the dining team.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="rest-confirmation-ref">
               Reference: {confirmedReservation.confirmationNumber}
             </div>
@@ -359,6 +444,17 @@ const RestaurantReservationModal = ({
                     {confirmedReservation.guestCount} Guests ({confirmedReservation.seatingPreference} Seating)
                   </div>
                 </div>
+                {confirmedReservation.reservationTotalPrice != null && (
+                  <div>
+                    <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--c-text-muted)' }}>Estimated reservation total</span>
+                    <div style={{ fontWeight: 700, color: 'var(--c-forest-deep)' }}>{formatPrice(confirmedReservation.reservationTotalPrice, confirmedReservation.reservationPriceCurrency || 'LKR')}</div>
+                    {confirmedReservation.pricingType === 'FIXED'
+                      ? <small>{formatPrice(confirmedReservation.fixedPrice, confirmedReservation.reservationPriceCurrency || 'LKR')} fixed offer price</small>
+                      : confirmedReservation.pricingType === 'FREE'
+                        ? <small>Free dining offer</small>
+                        : <small>{formatPrice(confirmedReservation.pricePerGuest, confirmedReservation.reservationPriceCurrency || 'LKR')} per guest</small>}
+                  </div>
+                )}
                 <div>
                   <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--c-text-muted)' }}>Lead Guest</span>
                   <div style={{ fontWeight: 600, color: 'var(--c-forest-deep)' }}>
@@ -425,6 +521,27 @@ const RestaurantReservationModal = ({
             </div>
 
             <form onSubmit={handleSubmit} className="rest-res-modal-body">
+              {preselectedExperience && (
+                <div className="rest-res-experience-summary">
+                  <span className="rest-res-experience-label">Selected experience</span>
+                  <strong>{preselectedExperience.title}</strong>
+                  <span className="rest-res-experience-price">
+                    {preselectedExperience.frontendOnly
+                      ? 'Price to be confirmed'
+                      : preselectedExperience.pricingType === 'FREE'
+                        ? 'Free'
+                        : preselectedExperience.pricingType === 'FIXED'
+                          ? `${preselectedExperience.currency || 'LKR'} ${Number(preselectedExperience.fixedPrice ?? preselectedExperience.price).toLocaleString()} fixed`
+                          : `${preselectedExperience.currency || 'LKR'} ${Number(preselectedExperience.pricePerGuest ?? preselectedExperience.price).toLocaleString()} per guest`}
+                  </span>
+                  {preselectedExperience.frontendOnly && (
+                    <p role="note">
+                      This experience is not configured as a bookable package. Submitting will create a real table reservation and pass your experience request to the dining team; experience availability and final price are not confirmed by this form.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* 1. Restaurant Selector */}
               <div className="rest-form-group">
                 <label className="rest-form-label">Select Restaurant</label>
@@ -518,11 +635,11 @@ const RestaurantReservationModal = ({
                     <input 
                       type="number"
                       min="1"
-                      max="30"
+                      max={maxPartySize}
                       className="rest-form-input"
                       style={{ textAlign: 'center', fontWeight: 600 }}
                       value={guestCount}
-                      onChange={(e) => setGuestCount(parseInt(e.target.value) || 1)}
+                      onChange={(e) => setGuestCount(e.target.value === '' ? 0 : Number(e.target.value))}
                     />
                     <button
                       type="button"
@@ -535,11 +652,25 @@ const RestaurantReservationModal = ({
                         fontSize: '1.2rem',
                         cursor: 'pointer'
                       }}
-                      onClick={() => setGuestCount((g) => g + 1)}
+                      disabled={guestCount >= maxPartySize}
+                      onClick={() => setGuestCount((g) => Math.min(maxPartySize, g + 1))}
                     >
                       +
                     </button>
                   </div>
+                  <div className="rest-reservation-price-estimate" aria-live="polite">
+                    <span>{pricingSource === 'OFFER' ? 'Offer total' : pricingSource === 'BUFFET' ? 'Buffet total' : 'Estimated total'}</span>
+                    <strong>{guestCountValid ? formatPrice(reservationTotalPrice, reservationPriceCurrency) : '—'}</strong>
+                    {pricingType === 'FIXED'
+                      ? <small>{formatPrice(fixedPrice, reservationPriceCurrency)} fixed offer price</small>
+                      : pricingType === 'FREE'
+                        ? <small>Free dining offer</small>
+                        : <small>{formatPrice(pricePerGuest, reservationPriceCurrency)} per guest x {guestCount} guests</small>}
+                    {pricingSource === 'OFFER' && <small>The offer price replaces the restaurant's standard reservation rate.</small>}
+                  </div>
+                  {pricingPackageLoading && <small role="status">Loading current restaurant pricing…</small>}
+                  {pricingPackageError && <p role="alert" style={{ color: '#B42318', margin: '0.5rem 0 0', fontSize: '0.82rem' }}>{pricingPackageError}</p>}
+                  {!guestCountValid && <p role="alert" style={{ color: '#B42318', margin: '0.5rem 0 0', fontSize: '0.82rem' }}>Choose between 1 and {maxPartySize} guests. This is the maximum capacity of one reservable table.</p>}
                 </div>
               </div>
 
@@ -559,7 +690,9 @@ const RestaurantReservationModal = ({
                 }}>
                   <FaChair />
                   <span>
-                    {availabilityData.available 
+                    {availabilityData.partySizeSupported === false
+                      ? `This restaurant can seat up to ${availabilityData.maxPartySize || maxPartySize} guests at one table.`
+                      : availabilityData.available 
                       ? `Tables available for ${guestCount} guests on this date and time.`
                       : 'High demand slot: table availability is limited.'}
                   </span>
@@ -734,7 +867,7 @@ const RestaurantReservationModal = ({
                 <button 
                   type="submit" 
                   className="rest-btn-primary"
-                  disabled={submitting || loadingRestaurants || restaurants.length === 0 || !selectedRestaurantId}
+                  disabled={submitting || loadingRestaurants || restaurants.length === 0 || !selectedRestaurantId || !guestCountValid || pricingPackageLoading || Boolean(pricingPackageError)}
                 >
                   {submitting ? 'Confirming Table...' : 'Confirm Reservation'}
                 </button>

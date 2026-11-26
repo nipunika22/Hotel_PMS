@@ -70,6 +70,12 @@ const restaurantReservationSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  pricePerGuest: { type: Number, min: 0 },
+  pricingType: { type: String, enum: ["PER_GUEST", "FIXED", "FREE"] },
+  pricingSource: { type: String, enum: ["RESTAURANT", "BUFFET", "OFFER"] },
+  fixedPrice: { type: Number, min: 0 },
+  reservationTotalPrice: { type: Number, min: 0 },
+  reservationPriceCurrency: { type: String, uppercase: true, trim: true, minlength: 3, maxlength: 3, match: /^[A-Z]{3}$/ },
   seatingPreference: {
     type: String,
     enum: ["Any", "Indoor", "Window", "Ocean Terrace", "Private Dining", "Outdoor", "Bar Counter"],
@@ -88,6 +94,12 @@ const restaurantReservationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "RestaurantOffer"
   },
+  offerTitle: { type: String, trim: true, default: "" },
+  offerPrice: { type: Number, min: 0 },
+  offerPricingType: { type: String, enum: ["PER_GUEST", "FIXED", "FREE"] },
+  offerPricePerGuest: { type: Number, min: 0 },
+  offerFixedPrice: { type: Number, min: 0 },
+  offerCurrency: { type: String, uppercase: true, trim: true, default: "LKR" },
   occasion: {
     type: String,
     enum: [
@@ -116,6 +128,17 @@ const restaurantReservationSchema = new mongoose.Schema({
     type: String,
     trim: true,
     default: ""
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["Unpaid", "Pending", "Paid", "Failed", "Partially Paid", "Refunded"],
+    default: "Unpaid",
+    index: true
+  },
+  paidAmount: {
+    type: Number,
+    min: 0,
+    default: 0
   },
   billedToFolio: {
     type: Boolean,

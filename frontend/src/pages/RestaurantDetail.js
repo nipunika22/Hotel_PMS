@@ -579,7 +579,7 @@ const RestaurantDetail = () => {
                       <div>
                         <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', color: 'var(--c-text-muted)', display: 'block' }}>From</span>
                         <span className="rest-offer-card-price">
-                          {offer.currency || 'LKR'} {offer.price?.toLocaleString()}
+                          {offer.pricingType === 'FREE' ? 'Free dining offer' : `${offer.currency || 'LKR'} ${Number(offer.pricingType === 'FIXED' ? offer.fixedPrice ?? offer.price : offer.pricePerGuest ?? offer.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${offer.pricingType === 'FIXED' ? ' fixed' : ' / guest'}`}
                         </span>
                       </div>
                       <span style={{ fontSize: '0.86rem', color: 'var(--c-brass)', fontWeight: 600 }}>

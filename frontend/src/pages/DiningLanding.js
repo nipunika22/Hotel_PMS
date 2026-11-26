@@ -75,6 +75,7 @@ const DiningLanding = () => {
   const [selectedDiningTypeForRes, setSelectedDiningTypeForRes] = useState('À la carte');
   const [selectedBuffetIdForRes, setSelectedBuffetIdForRes] = useState(null);
   const [selectedOfferIdForRes, setSelectedOfferIdForRes] = useState(null);
+  const [selectedExperienceForRes, setSelectedExperienceForRes] = useState(null);
 
   // Offer Modal State
   const [activeOfferModal, setActiveOfferModal] = useState(null);
@@ -151,17 +152,24 @@ const DiningLanding = () => {
     }
   };
 
-  const handleOpenReservation = (restaurant, diningType = 'À la carte', buffetId = null, offerId = null) => {
+  const handleOpenReservation = (restaurant, diningType = 'À la carte', buffetId = null, offerId = null, experience = null) => {
     setSelectedRestForRes(restaurant);
     setSelectedDiningTypeForRes(diningType);
     setSelectedBuffetIdForRes(buffetId);
     setSelectedOfferIdForRes(offerId);
+    setSelectedExperienceForRes(experience);
     setResModalOpen(true);
   };
 
   const handleReserveFromOffer = (offer) => {
-    const matchedRest = restaurants.find(r => r._id === offer.restaurant) || restaurants[0];
-    handleOpenReservation(matchedRest, 'Offer / Experience', null, offer._id);
+    const offerRestaurantId = typeof offer.restaurant === 'object'
+      ? offer.restaurant?._id || offer.restaurant?.slug
+      : offer.restaurant;
+    const matchedRest = restaurants.find((restaurant) => restaurant._id === offerRestaurantId || restaurant.slug === offerRestaurantId)
+      || (typeof offer.restaurant === 'object' ? offer.restaurant : null)
+      || restaurants[0];
+    const offerId = offer.frontendOnly ? null : offer._id;
+    handleOpenReservation(matchedRest, 'Offer / Experience', null, offerId, offer);
   };
 
   const bookableOffers = offersList.map((offer) => ({ ...offer, frontendOnly: false }));
@@ -542,11 +550,20 @@ const DiningLanding = () => {
                     </div>
                     {offer.terms && <p className="rest-offer-card-terms">Terms: {offer.terms}</p>}
                     <div className="rest-offer-card-footer">
-                      {Number(offer.price) > 0
-                        ? <div><span className="rest-offer-price-label">From</span><span className="rest-offer-card-price">{offer.currency || 'LKR'} {Number(offer.price).toLocaleString()}</span></div>
-                        : <span />}
+                      <div className="rest-offer-card-price-block">
+                        {offer.pricingType === 'FREE' ? (
+                          <span className="rest-offer-card-price">Free dining offer</span>
+                        ) : Number(offer.pricingType === 'FIXED' ? offer.fixedPrice ?? offer.price : offer.pricePerGuest ?? offer.price) >= 0 && (offer.pricingType === 'FIXED' ? offer.fixedPrice ?? offer.price : offer.pricePerGuest ?? offer.price) != null ? (
+                          <>
+                            <span className="rest-offer-price-label">{offer.pricingType === 'FIXED' ? 'Fixed price' : 'Per guest'}</span>
+                            <span className="rest-offer-card-price">{offer.currency || 'LKR'} {Number(offer.pricingType === 'FIXED' ? offer.fixedPrice ?? offer.price : offer.pricePerGuest ?? offer.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </>
+                        ) : (
+                          <span className="rest-offer-card-price-on-request">Price on request</span>
+                        )}
+                      </div>
                       <span className="rest-offer-view-details">
-                        {offer.frontendOnly ? 'View Experience' : 'View Details'} <FaArrowRight aria-hidden="true" />
+                        View Experience <FaArrowRight aria-hidden="true" />
                       </span>
                     </div>
                   </div>
@@ -562,6 +579,7 @@ const DiningLanding = () => {
           onClose={() => setActiveOfferModal(null)}
           offer={activeOfferModal}
           onReserveOffer={handleReserveFromOffer}
+          allowPromotionalReservation
           restaurantInfo={restaurants.find((restaurant) => {
             const offerRestaurantId = typeof activeOfferModal?.restaurant === 'object' ? activeOfferModal.restaurant?._id : activeOfferModal?.restaurant;
             return restaurant._id === offerRestaurantId || restaurant.slug === offerRestaurantId;
@@ -576,6 +594,7 @@ const DiningLanding = () => {
           preselectedDiningType={selectedDiningTypeForRes}
           preselectedBuffetId={selectedBuffetIdForRes}
           preselectedOfferId={selectedOfferIdForRes}
+          preselectedExperience={selectedExperienceForRes}
           restaurantsList={restaurants}
         />
 

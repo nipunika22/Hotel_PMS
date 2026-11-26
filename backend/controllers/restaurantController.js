@@ -10,6 +10,8 @@ const RestaurantReservation = require("../models/RestaurantReservation");
 const Reservation = require("../models/Reservation");
 const GuestExpense = require("../models/GuestExpense");
 const User = require("../models/User");
+const Payment = require("../models/Payment");
+const { isGuestCountWithinCapacity, resolveReservationPricing } = require("../utils/diningPricing");
 
 
 // Helper to check time overlap (assuming 90 minute dining window)
@@ -19,6 +21,26 @@ function isTimeConflicting(time1, time2, windowMinutes = 90) {
   const min1 = h1 * 60 + m1;
   const min2 = h2 * 60 + m2;
   return Math.abs(min1 - min2) < windowMinutes;
+}
+
+function getReservationEndTime(startTime) {
+  if (!/^\d{2}:\d{2}$/.test(String(startTime || ""))) return "";
+  const [hours, minutes] = String(startTime).split(":").map(Number);
+  const endMinutes = hours * 60 + minutes + 90;
+  const endHours = Math.floor(endMinutes / 60) % 24;
+  const endRemainder = endMinutes % 60;
+  return `${String(endHours).padStart(2, "0")}:${String(endRemainder).padStart(2, "0")}`;
+}
+
+async function getMaxPartySize(propertyId, restaurant) {
+  const largestTable = await RestaurantTable.findOne({
+    property: propertyId,
+    restaurant: restaurant._id,
+    active: true,
+    status: { $ne: "OUT_OF_SERVICE" }
+  }).sort({ capacity: -1 }).select("capacity").lean();
+  const maxTableCapacity = largestTable?.capacity || restaurant.capacity || 30;
+  return restaurant.capacity ? Math.min(maxTableCapacity, restaurant.capacity) : maxTableCapacity;
 }
 
 // ==========================================
@@ -42,10 +64,19 @@ exports.getRestaurants = async (req, res) => {
       .lean();
 
     // Ensure any legacy restaurant records without a slug have one populated
+    const maxTables = await RestaurantTable.aggregate([
+      { $match: { property: propertyId, restaurant: { $in: restaurants.map((rest) => rest._id) }, active: true, status: { $ne: "OUT_OF_SERVICE" } } },
+      { $group: { _id: "$restaurant", capacity: { $max: "$capacity" } } }
+    ]);
+    const maxCapacityByRestaurant = new Map(maxTables.map((item) => [String(item._id), item.capacity]));
     restaurants = restaurants.map((rest) => {
       if (!rest.slug && rest.name) {
         rest.slug = rest.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       }
+      const maxTableCapacity = maxCapacityByRestaurant.get(String(rest._id)) || rest.capacity || 30;
+      rest.maxPartySize = rest.capacity ? Math.min(maxTableCapacity, rest.capacity) : maxTableCapacity;
+      rest.reservationPricePerGuest = Number(rest.reservationPricePerGuest) || 0;
+      rest.reservationPriceCurrency = rest.reservationPriceCurrency || req.property?.currency || "LKR";
       return rest;
     });
 
@@ -151,11 +182,16 @@ exports.getRestaurantBySlug = async (req, res) => {
       .lean();
 
     const uniqueLocations = Array.from(new Set(tables.map((t) => t.location)));
+    const maxTableCapacity = tables.filter((table) => table.status !== "OUT_OF_SERVICE").reduce((max, table) => Math.max(max, table.capacity || 0), 0) || restaurant.capacity || 30;
+    const maxPartySize = restaurant.capacity ? Math.min(maxTableCapacity, restaurant.capacity) : maxTableCapacity;
 
     return res.status(200).json({
       success: true,
       data: {
         ...restaurant,
+        maxPartySize,
+        reservationPricePerGuest: Number(restaurant.reservationPricePerGuest) || 0,
+        reservationPriceCurrency: restaurant.reservationPriceCurrency || req.property?.currency || "LKR",
         menuCategories: categoriesWithItems,
         buffets,
         offers,
@@ -304,8 +340,8 @@ exports.checkAvailability = async (req, res) => {
       return res.status(400).json({ error: "Date and time parameters are required" });
     }
 
-    const guests = parseInt(guestCount, 10);
-    if (isNaN(guests) || guests < 1) {
+    const guests = Number(guestCount);
+    if (!Number.isSafeInteger(guests) || guests < 1) {
       return res.status(400).json({ error: "Valid guestCount is required (minimum 1)" });
     }
 
@@ -317,6 +353,8 @@ exports.checkAvailability = async (req, res) => {
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
+
+    const maxPartySize = await getMaxPartySize(propertyId, restaurant);
 
     // Find all tables for this restaurant that can accommodate the party
     const tableQuery = {
@@ -355,11 +393,14 @@ exports.checkAvailability = async (req, res) => {
       .filter((r) => isTimeConflicting(r.time, time, 90))
       .reduce((sum, r) => sum + (r.guestCount || 0), 0);
 
-    const isAvailable = (availableTables.length > 0 || (restaurant.capacity - totalBookedCovers >= guests));
+    const partySizeSupported = guests <= maxPartySize;
+    const isAvailable = partySizeSupported && (availableTables.length > 0 || (restaurant.capacity - totalBookedCovers >= guests));
 
     return res.status(200).json({
       success: true,
       available: isAvailable,
+      maxPartySize,
+      partySizeSupported,
       availableTablesCount: availableTables.length,
       estimatedCoversRemaining: Math.max(0, restaurant.capacity - totalBookedCovers),
       suggestedTableId: availableTables.length > 0 ? availableTables[0]._id : null
@@ -467,8 +508,8 @@ exports.createReservation = async (req, res) => {
       return res.status(400).json({ error: "Customer name, email, phone, date, and time are required" });
     }
 
-    const guests = parseInt(guestCount, 10);
-    if (isNaN(guests) || guests < 1) {
+    const guests = Number(guestCount);
+    if (!Number.isSafeInteger(guests) || guests < 1) {
       return res.status(400).json({ error: "Valid guest count (minimum 1) is required" });
     }
 
@@ -485,6 +526,37 @@ exports.createReservation = async (req, res) => {
     if (!restaurant.active) {
       return res.status(400).json({ error: "Restaurant is currently not accepting reservations" });
     }
+
+    const maxPartySize = await getMaxPartySize(propertyId, restaurant);
+    if (!isGuestCountWithinCapacity(guests, maxPartySize)) {
+      return res.status(400).json({ error: `Party size exceeds this restaurant's maximum table capacity of ${maxPartySize} guests` });
+    }
+
+    let selectedOffer = null;
+    if (offerId) {
+      if (!mongoose.Types.ObjectId.isValid(offerId)) return res.status(400).json({ error: "Invalid dining offer" });
+      selectedOffer = await RestaurantOffer.findOne({ _id: offerId, property: propertyId, restaurant: restaurant._id, active: true });
+      if (!selectedOffer) return res.status(400).json({ error: "Dining offer is unavailable at this restaurant or property" });
+    }
+
+    let selectedBuffet = null;
+    if (buffetSessionId) {
+      if (!mongoose.Types.ObjectId.isValid(buffetSessionId)) return res.status(400).json({ error: "Invalid buffet session" });
+      selectedBuffet = await RestaurantBuffet.findOne({ _id: buffetSessionId, property: propertyId, restaurant: restaurant._id, active: true });
+      if (!selectedBuffet) return res.status(400).json({ error: "Buffet session is unavailable at this restaurant or property" });
+      if (Number.isSafeInteger(Number(selectedBuffet.capacity)) && guests > Number(selectedBuffet.capacity)) {
+        return res.status(400).json({ error: `Guest count exceeds this buffet session's capacity of ${selectedBuffet.capacity}` });
+      }
+    }
+
+    const pricing = resolveReservationPricing({
+      restaurant: { ...restaurant.toObject(), reservationPriceCurrency: restaurant.reservationPriceCurrency || req.property?.currency || "LKR" },
+      buffet: selectedBuffet,
+      offer: selectedOffer,
+      guestType,
+      guestCount: guests
+    });
+    const { pricePerGuest, fixedPrice, pricingType, pricingSource, totalPrice: reservationTotalPrice, currency: reservationPriceCurrency } = pricing;
 
     // 2. Validate table capacity / double booking
     const tableQuery = {
@@ -598,10 +670,28 @@ exports.createReservation = async (req, res) => {
       date,
       time,
       guestCount: guests,
+      pricePerGuest,
+      pricingType,
+      pricingSource,
+      fixedPrice,
+      reservationTotalPrice,
+      reservationPriceCurrency,
+      totalAmount: reservationTotalPrice,
+      currency: reservationPriceCurrency,
+      paymentStatus: "Unpaid",
+      paidAmount: 0,
       seatingPreference,
       diningType,
-      buffetSession: buffetSessionId && mongoose.Types.ObjectId.isValid(buffetSessionId) ? buffetSessionId : undefined,
+      buffetSession: selectedBuffet?._id,
       offer: offerId && mongoose.Types.ObjectId.isValid(offerId) ? offerId : undefined,
+      offerTitle: selectedOffer?.title || "",
+      offerPrice: selectedOffer
+        ? (selectedOffer.pricingType === "FREE" ? 0 : selectedOffer.pricingType === "FIXED" ? selectedOffer.fixedPrice ?? selectedOffer.price : selectedOffer.pricePerGuest ?? selectedOffer.price)
+        : undefined,
+      offerPricingType: selectedOffer ? selectedOffer.pricingType || "PER_GUEST" : undefined,
+      offerPricePerGuest: selectedOffer && pricingSource === "OFFER" && pricingType === "PER_GUEST" ? pricePerGuest : undefined,
+      offerFixedPrice: selectedOffer && pricingSource === "OFFER" && pricingType === "FIXED" ? fixedPrice : undefined,
+      offerCurrency: selectedOffer?.currency || reservationPriceCurrency,
       occasion,
       specialRequests: specialRequests.trim(),
       status: "CONFIRMED"
@@ -859,7 +949,7 @@ exports.getAdminRestaurants = async (req, res) => {
 exports.createRestaurant = async (req, res) => {
   try {
     const propertyId = req.propertyId;
-    const allowedFields = ["name", "slug", "description", "cuisine", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "active"];
+    const allowedFields = ["name", "slug", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
     const data = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowedFields.includes(key)));
     data.property = propertyId;
 
@@ -889,7 +979,7 @@ exports.updateRestaurant = async (req, res) => {
     const propertyId = req.propertyId;
     const { id } = req.params;
 
-    const allowedFields = ["name", "slug", "description", "cuisine", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "active"];
+    const allowedFields = ["name", "slug", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowedFields.includes(key)));
     const restaurant = await Restaurant.findOneAndUpdate(
       { _id: id, property: propertyId },
@@ -1185,6 +1275,24 @@ exports.createOffer = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const data = { ...req.body, property: propertyId };
+    const pricingType = data.pricingType || "PER_GUEST";
+    if (!["PER_GUEST", "FIXED", "FREE"].includes(pricingType)) {
+      return res.status(400).json({ success: false, error: "Choose a valid offer pricing type" });
+    }
+    data.pricingType = pricingType;
+    if (pricingType === "PER_GUEST") {
+      data.pricePerGuest = data.pricePerGuest ?? data.price;
+      data.price = data.pricePerGuest;
+      data.fixedPrice = undefined;
+    } else if (pricingType === "FIXED") {
+      data.fixedPrice = data.fixedPrice ?? data.price;
+      data.price = data.fixedPrice;
+      data.pricePerGuest = undefined;
+    } else {
+      data.price = 0;
+      data.pricePerGuest = undefined;
+      data.fixedPrice = undefined;
+    }
     if (!mongoose.Types.ObjectId.isValid(data.restaurant) || !await Restaurant.exists({ _id: data.restaurant, property: propertyId })) {
       return res.status(400).json({ success: false, error: "Select a dining venue at the assigned property" });
     }
@@ -1205,9 +1313,29 @@ exports.updateOffer = async (req, res) => {
     if (req.body.restaurant && (!mongoose.Types.ObjectId.isValid(req.body.restaurant) || !await Restaurant.exists({ _id: req.body.restaurant, property: propertyId }))) {
       return res.status(400).json({ success: false, error: "Select a dining venue at the assigned property" });
     }
+    const currentOffer = await RestaurantOffer.findOne({ _id: id, property: propertyId });
+    if (!currentOffer) return res.status(404).json({ error: "Offer not found" });
+    const pricingType = req.body.pricingType || currentOffer.pricingType || "PER_GUEST";
+    if (!["PER_GUEST", "FIXED", "FREE"].includes(pricingType)) {
+      return res.status(400).json({ success: false, error: "Choose a valid offer pricing type" });
+    }
+    const updates = { ...req.body, property: propertyId, pricingType };
+    if (pricingType === "PER_GUEST") {
+      updates.pricePerGuest = req.body.pricePerGuest ?? req.body.price ?? currentOffer.pricePerGuest ?? currentOffer.price;
+      updates.price = updates.pricePerGuest;
+      updates.fixedPrice = null;
+    } else if (pricingType === "FIXED") {
+      updates.fixedPrice = req.body.fixedPrice ?? req.body.price ?? currentOffer.fixedPrice ?? currentOffer.price;
+      updates.price = updates.fixedPrice;
+      updates.pricePerGuest = null;
+    } else {
+      updates.price = 0;
+      updates.pricePerGuest = null;
+      updates.fixedPrice = null;
+    }
     const offer = await RestaurantOffer.findOneAndUpdate(
       { _id: id, property: propertyId },
-        { ...req.body, property: propertyId },
+      updates,
       { new: true, runValidators: true }
     );
     if (!offer) return res.status(404).json({ error: "Offer not found" });
@@ -1236,12 +1364,14 @@ exports.deleteOffer = async (req, res) => {
 exports.getAdminReservations = async (req, res) => {
   try {
     const propertyId = req.propertyId;
-    const { restaurantId, date, status, search } = req.query;
+    const { restaurantId, date, status, search, category } = req.query;
 
     const query = { property: propertyId };
     if (restaurantId) query.restaurant = restaurantId;
     if (date) query.date = date;
     if (status && status !== "ALL") query.status = status;
+    if (category === "experience") query.offer = { $exists: true, $ne: null };
+    if (category === "table") query.$and = [{ $or: [{ offer: { $exists: false } }, { offer: null }] }];
 
     if (search) {
       query.$or = [
@@ -1259,12 +1389,70 @@ exports.getAdminReservations = async (req, res) => {
       .populate("buffetSession", "name mealPeriod")
       .populate("offer", "title")
       .populate("hotelReservation", "reservationNumber checkInDate checkOutDate")
-      .sort({ date: -1, time: -1 });
+      .lean();
+
+    const now = new Date();
+    const sortReservations = (left, right) => {
+      const leftDate = /^\d{4}-\d{2}-\d{2}$/.test(left.date || "") ? new Date(`${left.date}T${/^\d{2}:\d{2}$/.test(left.time || "") ? left.time : "00:00"}:00`) : new Date(NaN);
+      const rightDate = /^\d{4}-\d{2}-\d{2}$/.test(right.date || "") ? new Date(`${right.date}T${/^\d{2}:\d{2}$/.test(right.time || "") ? right.time : "00:00"}:00`) : new Date(NaN);
+      const leftValid = !Number.isNaN(leftDate.getTime());
+      const rightValid = !Number.isNaN(rightDate.getTime());
+      if (!leftValid && !rightValid) return String(left.confirmationNumber || "").localeCompare(String(right.confirmationNumber || ""));
+      if (!leftValid) return 1;
+      if (!rightValid) return -1;
+      const leftUpcoming = leftDate.getTime() >= now.getTime();
+      const rightUpcoming = rightDate.getTime() >= now.getTime();
+      if (leftUpcoming !== rightUpcoming) return leftUpcoming ? -1 : 1;
+      return leftUpcoming ? leftDate - rightDate : rightDate - leftDate;
+    };
+
+    const reservationIds = reservations.map((reservation) => reservation._id);
+    const payments = reservationIds.length ? await Payment.find({
+      property: propertyId,
+      restaurantReservation: { $in: reservationIds }
+    }).sort({ createdAt: -1 }).lean() : [];
+
+    const paymentsByReservation = new Map();
+    payments.forEach((payment) => {
+      const key = String(payment.restaurantReservation);
+      if (!paymentsByReservation.has(key)) paymentsByReservation.set(key, []);
+      paymentsByReservation.get(key).push(payment);
+    });
+
+    const enrichedReservations = reservations
+      .map((reservation) => {
+        const relatedPayments = paymentsByReservation.get(String(reservation._id)) || [];
+        const confirmedPayments = relatedPayments.filter((payment) => payment.paymentStatus === "completed");
+        const amountPaid = confirmedPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+        const savedTotal = reservation.reservationTotalPrice != null
+          ? Number(reservation.reservationTotalPrice)
+          : (reservation.totalAmount != null && reservation.totalAmount > 0 ? Number(reservation.totalAmount) : null);
+        const currency = reservation.reservationPriceCurrency || reservation.currency || "LKR";
+        const outstandingBalance = savedTotal != null ? Math.max(0, savedTotal - amountPaid) : null;
+        let paymentStatus = "Unpaid";
+        if (savedTotal == null) paymentStatus = "Historical - price unavailable";
+        else if (amountPaid >= savedTotal && savedTotal > 0) paymentStatus = "Paid";
+        else if (confirmedPayments.length > 0 && amountPaid > 0) paymentStatus = "Partially Paid";
+        else if (relatedPayments.some((payment) => payment.paymentStatus === "pending" || payment.paymentStatus === "processing")) paymentStatus = "Pending";
+        else if (relatedPayments.some((payment) => payment.paymentStatus === "failed")) paymentStatus = "Failed";
+        return {
+          ...reservation,
+          endTime: getReservationEndTime(reservation.time),
+          savedReservationTotal: savedTotal,
+          savedReservationCurrency: currency,
+          amountPaid,
+          outstandingBalance,
+          paymentStatus,
+          type: "dining",
+          source: "restaurant_dining"
+        };
+      })
+      .sort(sortReservations);
 
     return res.status(200).json({
       success: true,
-      count: reservations.length,
-      data: reservations
+      count: enrichedReservations.length,
+      data: enrichedReservations
     });
   } catch (err) {
     console.error("getAdminReservations error:", err);
@@ -1277,6 +1465,8 @@ exports.updateReservationStatus = async (req, res) => {
     const propertyId = req.propertyId;
     const { id } = req.params;
     const { status, tableId, notes } = req.body;
+    const allowedStatuses = ["PENDING", "CONFIRMED", "SEATED", "COMPLETED", "CANCELLED", "NO_SHOW"];
+    if (status && !allowedStatuses.includes(status)) return res.status(400).json({ error: "Invalid reservation status" });
 
     const reservation = await RestaurantReservation.findOne({ _id: id, property: propertyId });
     if (!reservation) {
@@ -1292,9 +1482,9 @@ exports.updateReservationStatus = async (req, res) => {
         reservation.table = tableId;
         // Optionally update table status if guest is seated
         if (status === "SEATED") {
-          await RestaurantTable.findByIdAndUpdate(tableId, { status: "OCCUPIED" });
+          await RestaurantTable.findOneAndUpdate({ _id: tableId, property: propertyId }, { status: "OCCUPIED" });
         } else if (status === "COMPLETED") {
-          await RestaurantTable.findByIdAndUpdate(tableId, { status: "CLEANING" });
+          await RestaurantTable.findOneAndUpdate({ _id: tableId, property: propertyId }, { status: "CLEANING" });
         }
       } else if (!tableId) {
         reservation.table = undefined;
@@ -1333,16 +1523,26 @@ exports.chargeReservationToFolio = async (req, res) => {
     const { id } = req.params;
     const { amount, description, notes } = req.body;
 
-    const billAmount = parseFloat(amount);
-    if (isNaN(billAmount) || billAmount <= 0) {
-      return res.status(400).json({ error: "Valid charge amount greater than 0 is required" });
-    }
-
     const reservation = await RestaurantReservation.findOne({ _id: id, property: propertyId })
       .populate("restaurant", "name");
 
     if (!reservation) {
       return res.status(404).json({ error: "Restaurant reservation not found" });
+    }
+
+    const savedTotal = reservation.reservationTotalPrice != null
+      ? Number(reservation.reservationTotalPrice)
+      : null;
+    if (savedTotal == null) {
+      return res.status(400).json({ error: "This historical reservation has no recorded price. No folio charge will be created." });
+    }
+
+    const billAmount = parseFloat(amount);
+    if (!Number.isFinite(billAmount) || billAmount <= 0) {
+      return res.status(400).json({ error: "Valid charge amount greater than 0 is required" });
+    }
+    if (Math.abs(billAmount - savedTotal) > 0.01) {
+      return res.status(400).json({ error: "Folio amount must match the saved dining reservation total" });
     }
 
     if (reservation.billedToFolio) {
@@ -1390,7 +1590,11 @@ exports.chargeReservationToFolio = async (req, res) => {
     // Update RestaurantReservation record
     reservation.billedToFolio = true;
     reservation.folioExpenseId = guestExpense._id;
-    reservation.totalAmount = billAmount;
+    // Folio charges must use the existing reservation snapshot or an explicit
+    // authorized charge amount, never replace a missing historical snapshot.
+    if (reservation.reservationTotalPrice == null && reservation.totalAmount == null) {
+      reservation.totalAmount = billAmount;
+    }
     await reservation.save();
 
     return res.status(200).json({

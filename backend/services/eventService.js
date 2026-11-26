@@ -2,6 +2,7 @@
 const EventVenue = require("../models/EventVenue");
 const Event = require("../models/Event");
 const EventBooking = require("../models/EventBooking");
+const mongoose = require("mongoose");
 const { runWithOptionalTransaction } = require("../utils/transactionHelper");
 
 // In-memory mutex for serializing concurrent booking / confirmation operations per venue
@@ -37,10 +38,38 @@ async function withVenueLock(venueId, fn) {
 }
 
 /**
+ * Serialize schedule mutations for a venue across all app instances. The venue
+ * revision write and booking write share one MongoDB transaction; deployments
+ * without transaction support fail closed rather than allowing a double booking.
+ */
+async function withVenueScheduleTransaction(venueId, fn) {
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const lock = await EventVenue.updateOne(
+        { _id: venueId },
+        { $inc: { scheduleRevision: 1 } },
+        { session }
+      );
+      if (!lock.matchedCount) {
+        const error = new Error("Venue not found");
+        error.statusCode = 404;
+        throw error;
+      }
+      result = await fn(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
+/**
  * Check if requested time window conflicts with existing confirmed bookings
  * Overlap condition: (existing.startTime < newEndTime) && (existing.endTime > newStartTime)
  */
-async function checkVenueConflict({ propertyId, venueId, date, startTime, endTime, excludeBookingId = null }) {
+async function checkVenueConflict({ propertyId, venueId, date, startTime, endTime, excludeBookingId = null, session = null }) {
   if (!venueId || !date || !startTime || !endTime) {
     return { hasConflict: false };
   }
@@ -56,7 +85,9 @@ async function checkVenueConflict({ propertyId, venueId, date, startTime, endTim
     query._id = { $ne: excludeBookingId };
   }
 
-  const existingConfirmed = await EventBooking.find(query);
+  const conflictQuery = EventBooking.find(query);
+  if (session) conflictQuery.session(session);
+  const existingConfirmed = await conflictQuery;
 
   const conflictingBooking = existingConfirmed.find((booking) => {
     return booking.startTime < endTime && booking.endTime > startTime;
@@ -108,6 +139,7 @@ async function sendEventNotification({ type, booking, recipientEmail, details })
 
 module.exports = {
   withVenueLock,
+  withVenueScheduleTransaction,
   checkVenueConflict,
   isDateInFutureOrToday,
   sendEventNotification

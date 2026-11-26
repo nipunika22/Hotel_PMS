@@ -24,7 +24,15 @@ const eventPackageSchema = new mongoose.Schema({
   currency: {
     type: String,
     default: "LKR"
-  }
+  },
+  isActive: { type: Boolean, default: true }
+}, { _id: false });
+
+const additionalServiceSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  price: { type: Number, default: 0, min: 0 },
+  currency: { type: String, default: "LKR", trim: true },
+  isActive: { type: Boolean, default: true }
 }, { _id: false });
 
 const eventVenueSchema = new mongoose.Schema({
@@ -92,6 +100,23 @@ const eventVenueSchema = new mongoose.Schema({
   gallery: [{
     type: String
   }],
+  basePrice: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  currency: {
+    type: String,
+    default: "LKR",
+    uppercase: true,
+    trim: true
+  },
+  termsAndConditions: {
+    type: String,
+    default: "",
+    trim: true
+  },
+  additionalServices: [additionalServiceSchema],
   description: {
     type: String,
     default: "",
@@ -101,6 +126,12 @@ const eventVenueSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // Incremented inside event booking transactions to serialize venue schedule writes
+  // across application instances without changing existing venue data.
+  scheduleRevision: {
+    type: Number,
+    default: 0
   },
   createdAt: {
     type: Date,

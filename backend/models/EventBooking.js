@@ -138,6 +138,34 @@ const eventBookingSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  basePriceSnapshot: {
+    type: Number,
+    min: 0
+  },
+  packagePriceSnapshot: {
+    type: Number,
+    min: 0
+  },
+  additionalServiceNames: [{
+    type: String,
+    trim: true
+  }],
+  additionalServiceTotal: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["UNPAID", "PENDING", "PAID", "FAILED", "PARTIALLY_PAID", "REFUNDED"],
+    default: "UNPAID",
+    index: true
+  },
+  paidAmount: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
   currency: {
     type: String,
     default: "LKR"

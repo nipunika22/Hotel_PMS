@@ -1647,6 +1647,292 @@
   }
 }
 
+.rest-offer-card-price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.rest-offer-card-price-on-request,
+.rest-offer-modal-price-on-request {
+  color: var(--c-brass-hover, #9E773A);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.rest-offer-modal-price-on-request {
+  margin-bottom: 1.25rem;
+  font-size: 1.2rem;
+}
+
+.rest-experience-booking-note,
+.rest-res-experience-summary {
+  border: 1px solid rgba(182, 140, 72, 0.35);
+  border-radius: 8px;
+  background: rgba(182, 140, 72, 0.08);
+  color: var(--c-text-secondary);
+}
+
+.rest-experience-booking-note {
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.rest-res-experience-summary {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem;
+}
+
+.rest-res-experience-label {
+  color: var(--c-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rest-res-experience-summary strong {
+  color: var(--c-forest-deep);
+  font-size: 1rem;
+}
+
+.rest-res-experience-price {
+  color: var(--c-brass-hover, #9E773A);
+  font-weight: 700;
+}
+
+.rest-admin-restaurant-list-header,
+.rest-admin-restaurant-filters,
+.rest-admin-restaurant-card-heading,
+.rest-admin-restaurant-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rest-admin-restaurant-list-header {
+  margin-bottom: 1rem;
+}
+
+.rest-admin-restaurant-list-header > div:first-child p {
+  margin: 0.35rem 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.86rem;
+}
+
+.rest-admin-restaurant-filters {
+  min-width: min(100%, 480px);
+}
+
+.rest-admin-restaurant-filters input,
+.rest-admin-restaurant-filters select {
+  min-width: 0;
+}
+
+.rest-admin-restaurant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 1rem;
+}
+
+.rest-admin-restaurant-card {
+  overflow: hidden;
+  border: 1px solid var(--c-border-light, #e4e6df);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(27, 46, 37, 0.07);
+}
+
+.rest-admin-restaurant-image,
+.rest-admin-restaurant-image-placeholder {
+  display: grid;
+  width: 100%;
+  height: 190px;
+  place-items: center;
+  object-fit: cover;
+  background: linear-gradient(135deg, #e7e2d5, #f8f6ef);
+  color: var(--c-forest-deep);
+  font-size: 2rem;
+}
+
+.rest-admin-restaurant-card-content {
+  padding: 1rem;
+}
+
+.rest-admin-restaurant-card-heading {
+  align-items: flex-start;
+}
+
+.rest-admin-restaurant-card-heading h3 {
+  margin: 0;
+  color: var(--c-forest-deep);
+  font-size: 1.08rem;
+}
+
+.rest-admin-restaurant-card-heading > div > span {
+  display: inline-block;
+  margin-top: 0.3rem;
+  color: var(--c-text-muted);
+  font-size: 0.82rem;
+}
+
+.rest-admin-status,
+.department-offer-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rest-admin-status.active,
+.department-offer-status.active {
+  background: #e8f5e9;
+  color: #236331;
+}
+
+.rest-admin-status.inactive,
+.department-offer-status.inactive {
+  background: #fcebea;
+  color: #a3362d;
+}
+
+.rest-admin-restaurant-description {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 2.8em;
+  margin: 0.85rem 0;
+  color: var(--c-text-secondary);
+  font-size: 0.87rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rest-admin-restaurant-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.rest-admin-restaurant-meta div {
+  min-width: 0;
+}
+
+.rest-admin-restaurant-meta dt {
+  color: var(--c-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rest-admin-restaurant-meta dd {
+  overflow-wrap: anywhere;
+  margin: 0.2rem 0 0;
+  color: var(--c-forest-deep);
+  font-size: 0.83rem;
+}
+
+.rest-admin-restaurant-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--c-border-light, #e4e6df);
+  padding-top: 0.8rem;
+}
+
+.rest-admin-restaurant-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--c-border-light, #e4e6df);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--c-forest-deep);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.rest-admin-restaurant-actions button:hover {
+  border-color: var(--c-brass);
+  background: #faf7ee;
+}
+
+.rest-admin-restaurant-actions button.danger,
+.department-offer-actions button.danger,
+.department-offer-details-actions button.danger {
+  color: #a3362d;
+}
+
+.rest-admin-empty {
+  padding: 1.25rem;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+.rest-admin-restaurant-details {
+  position: relative;
+  max-width: 680px;
+  padding: 0;
+}
+
+.rest-admin-restaurant-details > img {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.rest-admin-restaurant-details .rest-res-modal-body {
+  padding: 1.5rem;
+}
+
+.rest-admin-restaurant-details h2 {
+  margin: 0.75rem 0 0.5rem;
+}
+
+.rest-admin-restaurant-details p {
+  line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .rest-admin-restaurant-list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rest-admin-restaurant-filters {
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.rest-res-experience-summary p {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .rest-res-experience-summary {
+    padding: 0.85rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rest-offer-card,
   .rest-offer-card-img {
@@ -1895,6 +2181,48 @@
 .rest-offer-view-details {
   min-height: 2.6rem;
   white-space: normal;
+}
+
+.rest-reservation-price-estimate {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  margin-top: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--c-border-medium);
+  border-radius: 6px;
+  background: var(--c-sand-subtle);
+}
+
+.rest-reservation-price-estimate span {
+  color: var(--c-text-secondary);
+  font-size: 0.8rem;
+}
+
+.rest-reservation-price-estimate strong {
+  color: var(--c-forest-deep);
+  font-size: 1.05rem;
+}
+
+.rest-reservation-price-estimate small {
+  width: 100%;
+  color: var(--c-text-muted);
+}
+
+.rest-admin-reservation-price {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.35rem;
+  font-size: 0.76rem;
+}
+
+.rest-admin-reservation-price span {
+  color: var(--c-text-muted);
+}
+
+.rest-admin-reservation-price strong {
+  color: var(--c-forest-deep);
 }
 
 @media (max-width: 1000px) {

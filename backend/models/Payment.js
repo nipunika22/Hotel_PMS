@@ -130,7 +130,8 @@ const paymentSchema = new mongoose.Schema({
   idempotencyKey: {
     type: String,
     index: true,
-    sparse: true
+    sparse: true,
+    unique: true
   },
   // Refund details
   refundAmount: {

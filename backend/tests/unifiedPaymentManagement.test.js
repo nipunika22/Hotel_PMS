@@ -514,6 +514,185 @@ describe('Unified Payment Management & Financial Reconciliation Test Suite', () 
     assert.equal(updatedResv.advancePayment, 30000);
   });
 
+  it('records multiple balance payments against invoice total and preserves its original payment history', async () => {
+    const guest = await Guest.create({
+      firstName: 'Nadeesha',
+      lastName: 'Perera',
+      email: 'nadeesha@example.test',
+      phone: '0774445556',
+      property: property._id,
+      nationalIdType: 'National ID',
+      nationalIdNumber: 'NIC-55555',
+      nationality: 'Sri Lankan'
+    });
+    const resv = await Reservation.create({
+      property: property._id,
+      guest: guest._id,
+      room: room._id,
+      bookingSource: 'Walk-in',
+      checkInDate: new Date('2026-12-25'),
+      checkOutDate: new Date('2026-12-27'),
+      numberOfAdults: 2,
+      numberOfChildren: 0,
+      numberOfGuests: 2,
+      roomType: 'Deluxe',
+      ratePerNight: 15000,
+      numberOfNights: 2,
+      roomCharges: 30000,
+      totalAmount: 30000,
+      advancePayment: 30000,
+      paymentStatus: 'Partial',
+      status: 'Checked-In',
+      createdBy: staffUser._id
+    });
+    const booking = await Booking.create({
+      property: property._id,
+      user: customer._id,
+      room: room._id,
+      checkInDate: resv.checkInDate,
+      checkOutDate: resv.checkOutDate,
+      numberOfGuests: 2,
+      totalPrice: 30000,
+      paymentStatus: 'pending',
+      bookingStatus: 'checked-in',
+      reservation: resv._id
+    });
+    const initialPaymentDate = new Date('2026-12-24T10:00:00Z');
+    const invoice = await Invoice.create({
+      property: property._id,
+      invoiceNumber: 'INV-TEST-BALANCE-001',
+      reservation: resv._id,
+      guest: guest._id,
+      checkInDate: resv.checkInDate,
+      checkOutDate: resv.checkOutDate,
+      numberOfNights: 2,
+      roomCharges: 30000,
+      totalExtraExpenses: 20000,
+      subtotal: 50000,
+      totalAmount: 50000,
+      advancePaid: 30000,
+      totalPaid: 30000,
+      balanceDue: 20000,
+      paymentStatus: 'Partial',
+      payments: [{
+        paymentDate: initialPaymentDate,
+        amount: 30000,
+        paymentMethod: 'Cash',
+        transactionId: 'INITIAL-ADVANCE-001',
+        notes: 'Original advance'
+      }],
+      generatedBy: staffUser._id
+    });
+
+    const staffToken = createToken(staffUser);
+    const record = (amount, idempotencyKey) => fetch(`${baseUrl}/invoices/${invoice._id}/payment`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${staffToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, paymentMethod: 'Bank Transfer', idempotencyKey })
+    });
+
+    const first = await record(7000, 'BALANCE-PAYMENT-001');
+    assert.equal(first.status, 200);
+    const partialInvoice = await first.json();
+    assert.equal(partialInvoice.totalPaid, 37000);
+    assert.equal(partialInvoice.balanceDue, 13000);
+    assert.equal(partialInvoice.paymentStatus, 'Partial');
+    assert.equal(partialInvoice.payments.length, 2);
+
+    const replay = await record(7000, 'BALANCE-PAYMENT-001');
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).payments.length, 2);
+    assert.equal(await Payment.countDocuments({ invoice: invoice._id }), 1);
+
+    const final = await record(13000, 'BALANCE-PAYMENT-002');
+    assert.equal(final.status, 200);
+    const settledInvoice = await final.json();
+    assert.equal(settledInvoice.totalPaid, 50000);
+    assert.equal(settledInvoice.balanceDue, 0);
+    assert.equal(settledInvoice.paymentStatus, 'Paid');
+    assert.equal(settledInvoice.payments.length, 3);
+    assert.equal(settledInvoice.payments[0].transactionId, 'INITIAL-ADVANCE-001');
+
+    const paymentRecords = await Payment.find({ invoice: invoice._id }).sort({ amount: 1 });
+    assert.deepEqual(paymentRecords.map((payment) => payment.amount), [7000, 13000]);
+    assert.ok(paymentRecords.every((payment) =>
+      payment.paymentStatus === 'completed' &&
+      payment.auditLog.some((entry) => entry.performedBy.toString() === staffUser._id.toString())
+    ));
+
+    const updatedReservation = await Reservation.findById(resv._id);
+    assert.equal(updatedReservation.advancePayment, 50000);
+    assert.equal(updatedReservation.paymentStatus, 'Paid');
+    const updatedBooking = await Booking.findById(booking._id);
+    assert.equal(updatedBooking.paymentStatus, 'paid');
+  });
+
+  it('prevents concurrent invoice payments from exceeding the outstanding balance', async () => {
+    const guest = await Guest.create({
+      firstName: 'Chamari',
+      lastName: 'Silva',
+      email: 'chamari@example.test',
+      phone: '0777778888',
+      property: property._id,
+      nationalIdType: 'National ID',
+      nationalIdNumber: 'NIC-66666',
+      nationality: 'Sri Lankan'
+    });
+    const resv = await Reservation.create({
+      property: property._id,
+      guest: guest._id,
+      room: room._id,
+      bookingSource: 'Walk-in',
+      checkInDate: new Date('2026-12-28'),
+      checkOutDate: new Date('2026-12-29'),
+      numberOfAdults: 1,
+      numberOfChildren: 0,
+      numberOfGuests: 1,
+      roomType: 'Deluxe',
+      ratePerNight: 20000,
+      numberOfNights: 1,
+      roomCharges: 20000,
+      totalAmount: 20000,
+      advancePayment: 0,
+      paymentStatus: 'Pending',
+      status: 'Checked-In',
+      createdBy: staffUser._id
+    });
+    const invoice = await Invoice.create({
+      property: property._id,
+      invoiceNumber: 'INV-TEST-CONCURRENT-001',
+      reservation: resv._id,
+      guest: guest._id,
+      checkInDate: resv.checkInDate,
+      checkOutDate: resv.checkOutDate,
+      numberOfNights: 1,
+      roomCharges: 20000,
+      subtotal: 20000,
+      totalAmount: 20000,
+      advancePaid: 0,
+      totalPaid: 0,
+      balanceDue: 20000,
+      paymentStatus: 'Unpaid',
+      generatedBy: staffUser._id
+    });
+    const staffToken = createToken(staffUser);
+    const sendConcurrentPayment = (key) => fetch(`${baseUrl}/invoices/${invoice._id}/payment`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${staffToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 15000, paymentMethod: 'Cash', idempotencyKey: key })
+    });
+
+    const responses = await Promise.all([
+      sendConcurrentPayment('CONCURRENT-PAYMENT-001'),
+      sendConcurrentPayment('CONCURRENT-PAYMENT-002')
+    ]);
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 400]);
+    const finalInvoice = await Invoice.findById(invoice._id);
+    assert.equal(finalInvoice.totalPaid, 15000);
+    assert.equal(finalInvoice.balanceDue, 5000);
+    assert.equal(await Payment.countDocuments({ invoice: invoice._id }), 1);
+  });
+
   // -------------------------------------------------------------------------
   // Scenario 7: PayHere integration regression
   // -------------------------------------------------------------------------

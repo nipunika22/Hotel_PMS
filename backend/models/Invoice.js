@@ -101,6 +101,11 @@ const invoiceSchema = new mongoose.Schema({
     enum: ["Unpaid", "Partial", "Paid", "Refunded"],
     default: "Unpaid"
   },
+  status: {
+    type: String,
+    enum: ["Draft", "Issued", "Paid", "Cancelled", "Refunded"],
+    default: "Issued"
+  },
   payments: [{
     paymentDate: Date,
     amount: Number,

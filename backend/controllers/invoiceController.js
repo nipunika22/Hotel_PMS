@@ -253,14 +253,21 @@ exports.generateInvoice = async (req, res) => {
 // Add payment to invoice
 exports.addPayment = async (req, res) => {
   const { id } = req.params;
-  const { amount, paymentMethod, transactionId, notes } = req.body;
+  const {
+    amount,
+    paymentMethod,
+    transactionId,
+    transactionReference,
+    notes,
+    idempotencyKey
+  } = req.body;
 
   if (!amount || !paymentMethod) {
     return res.status(400).json({ error: "Amount and payment method are required" });
   }
 
   try {
-    const invoice = await Invoice.findById(id);
+    const invoice = await Invoice.findOne(buildPropertyFilter(req, { _id: id }));
 
     if (!invoice) {
       return res.status(404).json({ error: "Invoice not found" });
@@ -272,14 +279,15 @@ exports.addPayment = async (req, res) => {
       reservationId: invoice.reservation,
       amount: Number(amount),
       paymentMethod,
-      transactionId,
-      transactionReference: transactionId,
+      transactionId: transactionId || transactionReference,
+      transactionReference: transactionReference || transactionId,
       notes,
+      idempotencyKey,
       receivedBy: req.user.id,
       propertyId: invoice.property || req.propertyId
     });
 
-    const updatedInvoice = await Invoice.findById(id)
+    const updatedInvoice = await Invoice.findOne(buildPropertyFilter(req, { _id: id }))
       .populate("guest")
       .populate("reservation")
       .populate("travelAgent");

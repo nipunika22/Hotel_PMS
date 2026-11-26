@@ -1,5 +1,5 @@
 // frontend/src/pages/ReservationDetails.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FaArrowLeft, 
@@ -25,6 +25,7 @@ const ReservationDetails = () => {
   const { user } = useAuth();
 
   const [reservation, setReservation] = useState(null);
+  const [invoice, setInvoice] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +41,14 @@ const ReservationDetails = () => {
     transactionReference: '',
     notes: ''
   });
+  const paymentKeyRef = useRef(null);
 
   const staffRoles = ['admin', 'staff', 'finance', 'manager', 'super_admin'];
   const isAuthorizedStaff = user && staffRoles.includes((user.role || '').toLowerCase());
 
   useEffect(() => {
     fetchReservation();
+    fetchInvoice();
     fetchExpenses();
     fetchPayments();
   }, [id]);
@@ -59,6 +62,16 @@ const ReservationDetails = () => {
       navigate('/reservations');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInvoice = async () => {
+    try {
+      const response = await invoiceAPI.getInvoicesByReservation(id);
+      setInvoice(Array.isArray(response.data) ? response.data[0] || null : null);
+    } catch (error) {
+      console.warn('Failed to load reservation invoice:', error);
+      setInvoice(null);
     }
   };
 
@@ -86,14 +99,34 @@ const ReservationDetails = () => {
   };
 
   // Financial calculations
-  const totalAmount = Number(reservation?.totalAmount || 0);
+  const totalAmount = Number(invoice?.totalAmount ?? reservation?.totalAmount ?? 0);
   const validPayments = Array.isArray(payments)
     ? payments.filter((p) => p.paymentStatus === 'completed' || p.paymentStatus === 'partially_refunded')
     : [];
   const ledgerPaid = validPayments.reduce((sum, p) => sum + ((p.amount || 0) - (p.refundAmount || 0)), 0);
-  const totalPaid = ledgerPaid > 0 ? ledgerPaid : Number(reservation?.advancePayment || 0);
+  const totalPaid = invoice
+    ? Number(invoice.totalPaid ?? invoice.advancePaid ?? 0)
+    : ledgerPaid > 0 ? ledgerPaid : Number(reservation?.advancePayment || 0);
   const outstandingBalance = Math.max(0, totalAmount - totalPaid);
-  const isFullyPaid = outstandingBalance <= 0 || reservation?.paymentStatus === 'Paid';
+  const isFullyPaid = outstandingBalance <= 0;
+  const invoiceHistoryOnly = (invoice?.payments || [])
+    .filter((invoicePayment) => !validPayments.some((payment) => {
+      const paymentReferences = [payment.paymentReference, payment.transactionId].filter(Boolean).map(String);
+      if (invoicePayment.transactionId && paymentReferences.includes(String(invoicePayment.transactionId))) return true;
+      return Number(payment.amount) === Number(invoicePayment.amount) &&
+        payment.paymentDate &&
+        invoicePayment.paymentDate &&
+        Math.abs(new Date(payment.paymentDate).getTime() - new Date(invoicePayment.paymentDate).getTime()) < 60000;
+    }))
+    .map((payment, index) => ({
+      ...payment,
+      _id: payment._id || `invoice-history-${index}`,
+      paymentReference: payment.transactionId || 'INVOICE-HISTORY',
+      paymentStatus: 'completed',
+      auditLog: []
+    }));
+  const paymentHistory = [...validPayments, ...invoiceHistoryOnly]
+    .sort((left, right) => new Date(right.paymentDate || right.createdAt || 0) - new Date(left.paymentDate || left.createdAt || 0));
 
   const handleOpenPaymentModal = () => {
     setPaymentForm({
@@ -103,6 +136,7 @@ const ReservationDetails = () => {
       transactionReference: '',
       notes: ''
     });
+    paymentKeyRef.current = `RES-PAY-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setShowPaymentModal(true);
   };
 
@@ -124,17 +158,18 @@ const ReservationDetails = () => {
       setSubmittingPayment(true);
       await paymentAPI.recordPayment({
         reservationId: id,
-        bookingId: reservation.booking || reservation.bookingId || id,
+        ...(invoice ? { invoiceId: invoice._id } : {}),
         amount: enteredAmount,
         paymentMethod: paymentForm.paymentMethod,
         paymentDate: paymentForm.paymentDate ? new Date(paymentForm.paymentDate) : new Date(),
         transactionReference: paymentForm.transactionReference.trim() || undefined,
         notes: paymentForm.notes.trim() || undefined,
-        idempotencyKey: `RES-PAY-${id}-${Date.now()}`
+        idempotencyKey: paymentKeyRef.current
       });
 
       toast.success(`Payment of LKR ${enteredAmount.toLocaleString()} recorded successfully!`);
       setShowPaymentModal(false);
+      paymentKeyRef.current = null;
       setPaymentForm({
         amount: '',
         paymentMethod: 'Cash',
@@ -144,7 +179,7 @@ const ReservationDetails = () => {
       });
 
       // Refresh reservation and payment history concurrently
-      await Promise.all([fetchReservation(), fetchPayments()]);
+      await Promise.all([fetchReservation(), fetchInvoice(), fetchPayments()]);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to record payment');
     } finally {
@@ -253,9 +288,9 @@ const ReservationDetails = () => {
         </div>
         <div className="topbar-actions">
           {/* Quick Record Payment in Topbar for staff */}
-          {isAuthorizedStaff && reservation.status !== 'Cancelled' && !isFullyPaid && (
+          {isAuthorizedStaff && reservation.status !== 'Cancelled' && !isFullyPaid && invoice?.paymentStatus !== 'Refunded' && (
             <button onClick={handleOpenPaymentModal} className="btn btn-success" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <FaMoneyBillWave /> Record Payment
+              <FaMoneyBillWave /> Record Balance Payment
             </button>
           )}
 
@@ -297,7 +332,7 @@ const ReservationDetails = () => {
               </h2>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 {getStatusBadge(reservation.status)}
-                {getPaymentStatusBadge(reservation.paymentStatus)}
+                {getPaymentStatusBadge(invoice?.paymentStatus || reservation.paymentStatus)}
                 <span className="badge badge-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                   <FaCreditCard /> {reservation.paymentMethod || 'Unspecified'}
                 </span>
@@ -379,7 +414,7 @@ const ReservationDetails = () => {
                 Authoritative record of all collections, advances, and remaining balances for this stay.
               </p>
             </div>
-            {isAuthorizedStaff && reservation.status !== 'Cancelled' && (
+            {isAuthorizedStaff && reservation.status !== 'Cancelled' && invoice?.paymentStatus !== 'Refunded' && (
               <button
                 type="button"
                 onClick={handleOpenPaymentModal}
@@ -387,7 +422,7 @@ const ReservationDetails = () => {
                 className={`btn ${isFullyPaid ? 'btn-secondary' : 'btn-success'}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
               >
-                <FaMoneyBillWave /> {isFullyPaid ? 'Fully Paid' : 'Record Payment'}
+                <FaMoneyBillWave /> {isFullyPaid ? 'Fully Paid' : 'Record Balance Payment'}
               </button>
             )}
           </div>
@@ -437,7 +472,7 @@ const ReservationDetails = () => {
             <div>
               <div style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Status</div>
               <div style={{ marginTop: '0.35rem' }}>
-                {getPaymentStatusBadge(reservation.paymentStatus)}
+                {getPaymentStatusBadge(invoice?.paymentStatus || reservation.paymentStatus)}
               </div>
               <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem' }}>
                 Method: <strong>{reservation.paymentMethod || 'Unspecified'}</strong>
@@ -455,7 +490,7 @@ const ReservationDetails = () => {
               <div className="spinner" style={{ width: '24px', height: '24px', margin: '0 auto 0.5rem' }}></div>
               Loading payment history...
             </div>
-          ) : payments.length === 0 ? (
+          ) : paymentHistory.length === 0 ? (
             <div style={{
               padding: '1.5rem',
               textAlign: 'center',
@@ -486,7 +521,7 @@ const ReservationDetails = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p) => {
+                  {paymentHistory.map((p) => {
                     const staffUser = p.auditLog?.find((a) => a.performedBy)?.performedBy;
                     return (
                       <tr key={p._id}>
@@ -680,7 +715,7 @@ const ReservationDetails = () => {
                   <FaMoneyBillWave />
                 </div>
                 <div>
-                  <h3 className="serendib-pay-title">Record Front-Desk Payment</h3>
+                  <h3 className="serendib-pay-title">Record Balance Payment</h3>
                   <p className="serendib-pay-subtitle">
                     Reservation #{reservation.reservationNumber} · {reservation.guest?.firstName} {reservation.guest?.lastName}
                   </p>
@@ -772,7 +807,6 @@ const ReservationDetails = () => {
                   <option value="Cash">Cash (Front Desk)</option>
                   <option value="Card">Credit / Debit Card (POS)</option>
                   <option value="Bank Transfer">Bank Transfer / Cheque</option>
-                  <option value="Online">Online Authorization</option>
                 </select>
               </div>
 

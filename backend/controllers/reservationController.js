@@ -462,7 +462,7 @@ exports.checkOut = async (req, res) => {
 
     // Check if invoice exists and is fully paid
     const Invoice = require("../models/Invoice");
-    let invoice = await Invoice.findOne({ reservation: id });
+    let invoice = await Invoice.findOne(buildPropertyFilter(req, { reservation: id }));
     
     if (!invoice) {
       // Auto-generate invoice
@@ -518,11 +518,42 @@ exports.checkOut = async (req, res) => {
     }
 
     // Check if invoice is fully paid
-    if (invoice.balanceDue > 0) {
+    const Payment = require("../models/Payment");
+    const canonicalInvoicePayments = await Payment.aggregate([
+      {
+        $match: {
+          invoice: invoice._id,
+          paymentStatus: { $in: ["completed", "partially_refunded"] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          paid: {
+            $sum: {
+              $subtract: [
+                { $ifNull: ["$amount", 0] },
+                { $ifNull: ["$refundAmount", 0] }
+              ]
+            }
+          }
+        }
+      }
+    ]);
+    const canonicalPaid = Math.max(0, Number(canonicalInvoicePayments[0]?.paid || 0));
+    const latestBalanceDue = Math.max(
+      0,
+      Number(invoice.totalAmount || 0) -
+      Math.max(
+        Number(invoice.totalPaid ?? invoice.advancePaid ?? 0),
+        canonicalPaid
+      )
+    );
+    if (latestBalanceDue > 0) {
       return res.status(400).json({ 
-        error: "Cannot check out. Outstanding balance of ₹" + invoice.balanceDue.toLocaleString() + " must be paid first.",
+        error: "Cannot check out. Outstanding balance of LKR " + latestBalanceDue.toLocaleString() + " must be paid first.",
         invoiceId: invoice._id,
-        balanceDue: invoice.balanceDue
+        balanceDue: latestBalanceDue
       });
     }
 

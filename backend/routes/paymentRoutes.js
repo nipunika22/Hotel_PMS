@@ -76,7 +76,7 @@ router.post(
 router.get("/:id", protect, getPayment);
 
 // Manual payment creation (Backward compatibility)
-router.post("/", protect, createPayment);
+router.post("/", protect, authorize(...ALL_STAFF_ROLES), createPayment);
 
 // Update payment
 router.put(

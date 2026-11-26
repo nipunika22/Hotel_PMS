@@ -1,7 +1,7 @@
 // frontend/src/pages/InvoiceDetails.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FaArrowLeft, FaPrint, FaMoneyBillWave } from 'react-icons/fa';
+import { FaArrowLeft, FaPrint, FaMoneyBillWave, FaTimes } from 'react-icons/fa';
 import { invoiceAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
@@ -12,12 +12,14 @@ const InvoiceDetails = () => {
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
   const [paymentData, setPaymentData] = useState({
     amount: 0,
     paymentMethod: 'Cash',
-    transactionId: '',
+    transactionReference: '',
     notes: ''
   });
+  const paymentKeyRef = useRef(null);
 
   useEffect(() => {
     fetchInvoice();
@@ -27,7 +29,10 @@ const InvoiceDetails = () => {
     try {
       const response = await invoiceAPI.getInvoice(id);
       setInvoice(response.data);
-      setPaymentData(prev => ({ ...prev, amount: response.data.balanceDue }));
+      setPaymentData(prev => ({
+        ...prev,
+        amount: Math.max(0, Number(response.data.totalAmount || 0) - Number(response.data.totalPaid ?? response.data.advancePaid ?? 0))
+      }));
     } catch (error) {
       toast.error('Failed to load invoice');
       navigate('/invoices');
@@ -36,29 +41,54 @@ const InvoiceDetails = () => {
     }
   };
 
+  const openPaymentForm = () => {
+    paymentKeyRef.current = `INV-PAY-${id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setPaymentData({
+      amount: Math.max(0, Number(invoice.totalAmount || 0) - Number(invoice.totalPaid ?? invoice.advancePaid ?? 0)),
+      paymentMethod: 'Cash',
+      transactionReference: '',
+      notes: ''
+    });
+    setShowPaymentForm(true);
+  };
+
+  const closePaymentForm = () => {
+    if (submittingPayment) return;
+    setShowPaymentForm(false);
+    paymentKeyRef.current = null;
+  };
+
   const handlePayment = async (e) => {
     e.preventDefault();
+    const balanceDue = Math.max(0, Number(invoice.totalAmount || 0) - Number(invoice.totalPaid ?? invoice.advancePaid ?? 0));
 
-    if (paymentData.amount <= 0) {
+    if (!Number.isFinite(Number(paymentData.amount)) || Number(paymentData.amount) <= 0) {
       toast.error('Payment amount must be greater than 0');
       return;
     }
 
-    if (paymentData.amount > invoice.balanceDue) {
+    if (Number(paymentData.amount) > balanceDue) {
       toast.error('Payment amount cannot exceed balance due');
       return;
     }
 
     try {
+      setSubmittingPayment(true);
       await invoiceAPI.addPayment(id, {
-        ...paymentData,
-        paymentDate: new Date().toISOString()
+        amount: Number(paymentData.amount),
+        paymentMethod: paymentData.paymentMethod,
+        transactionReference: paymentData.transactionReference.trim() || undefined,
+        notes: paymentData.notes.trim() || undefined,
+        idempotencyKey: paymentKeyRef.current
       });
       toast.success('Payment added successfully');
       setShowPaymentForm(false);
-      fetchInvoice();
+      paymentKeyRef.current = null;
+      await fetchInvoice();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to add payment');
+    } finally {
+      setSubmittingPayment(false);
     }
   };
 
@@ -73,7 +103,7 @@ const InvoiceDetails = () => {
       'Paid': 'badge-success',
       'Refunded': 'badge-secondary'
     };
-    return <span className={`badge ${classes[status]}`}>{status}</span>;
+    return <span className={`badge ${classes[status]}`}>{status === 'Paid' ? 'Fully Paid' : status}</span>;
   };
 
   if (loading) {
@@ -83,6 +113,8 @@ const InvoiceDetails = () => {
   if (!invoice) {
     return <div className="empty-state"><h3>Invoice not found</h3></div>;
   }
+
+  const balanceDue = Math.max(0, Number(invoice.totalAmount || 0) - Number(invoice.totalPaid ?? invoice.advancePaid ?? 0));
 
   return (
     <div>
@@ -94,9 +126,9 @@ const InvoiceDetails = () => {
           <h1 className="topbar-title">Invoice Details</h1>
         </div>
         <div className="topbar-actions">
-          {invoice.balanceDue > 0 && (
-            <button onClick={() => setShowPaymentForm(!showPaymentForm)} className="btn btn-success">
-              <FaMoneyBillWave /> Add Payment
+          {balanceDue > 0 && invoice.paymentStatus !== 'Refunded' && (
+            <button onClick={openPaymentForm} className="btn btn-success">
+              <FaMoneyBillWave /> Record Balance Payment
             </button>
           )}
           <button onClick={handlePrint} className="btn btn-primary">
@@ -106,11 +138,37 @@ const InvoiceDetails = () => {
       </div>
 
       <div className="content-wrapper">
-        {/* Payment Form */}
+        {/* Balance payment modal */}
         {showPaymentForm && (
-          <div className="card no-print" style={{ borderLeft: '4px solid #10b981', marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1.5rem' }}>Add Payment</h3>
-            <form onSubmit={handlePayment}>
+          <div
+            className="no-print"
+            role="presentation"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closePaymentForm();
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1000,
+              background: 'rgba(15, 23, 42, 0.55)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem'
+            }}
+          >
+            <div className="card" role="dialog" aria-modal="true" aria-labelledby="balance-payment-title" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <h3 id="balance-payment-title" style={{ margin: 0 }}>Record Balance Payment</h3>
+                <button type="button" className="btn btn-outline" onClick={closePaymentForm} disabled={submittingPayment} aria-label="Close payment dialog">
+                  <FaTimes />
+                </button>
+              </div>
+              <form onSubmit={handlePayment}>
+                <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#f8fafc', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>Current Outstanding Balance</strong>
+                  <strong>LKR {balanceDue.toLocaleString()}</strong>
+                </div>
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label required">Amount</label>
@@ -118,12 +176,21 @@ const InvoiceDetails = () => {
                     type="number"
                     className="form-control"
                     value={paymentData.amount}
-                    onChange={(e) => setPaymentData({ ...paymentData, amount: parseFloat(e.target.value) || 0 })}
-                    max={invoice.balanceDue}
+                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                    max={balanceDue}
+                    min="0.01"
                     step="0.01"
                     required
                   />
-                  <div className="form-help">Maximum: ₹{invoice.balanceDue.toLocaleString()}</div>
+                  <div className="form-help">Maximum: LKR {balanceDue.toLocaleString()}</div>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ marginTop: '0.5rem' }}
+                    onClick={() => setPaymentData({ ...paymentData, amount: balanceDue })}
+                  >
+                    Pay Full Balance
+                  </button>
                 </div>
 
                 <div className="form-group">
@@ -135,22 +202,18 @@ const InvoiceDetails = () => {
                     required
                   >
                     <option value="Cash">Cash</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Debit Card">Debit Card</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Net Banking">Net Banking</option>
-                    <option value="Cheque">Cheque</option>
+                    <option value="Card">Card</option>
                     <option value="Bank Transfer">Bank Transfer</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Transaction ID</label>
+                  <label className="form-label">Transaction Reference</label>
                   <input
                     type="text"
                     className="form-control"
-                    value={paymentData.transactionId}
-                    onChange={(e) => setPaymentData({ ...paymentData, transactionId: e.target.value })}
+                    value={paymentData.transactionReference}
+                    onChange={(e) => setPaymentData({ ...paymentData, transactionReference: e.target.value })}
                     placeholder="Optional"
                   />
                 </div>
@@ -168,14 +231,15 @@ const InvoiceDetails = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button type="submit" className="btn btn-success">
-                  Add Payment
+                <button type="submit" className="btn btn-success" disabled={submittingPayment}>
+                  {submittingPayment ? 'Recording...' : 'Confirm Payment'}
                 </button>
-                <button type="button" onClick={() => setShowPaymentForm(false)} className="btn btn-secondary">
+                <button type="button" onClick={closePaymentForm} className="btn btn-secondary" disabled={submittingPayment}>
                   Cancel
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         )}
 
@@ -252,8 +316,8 @@ const InvoiceDetails = () => {
                   <tr>
                     <td>Room Accommodation</td>
                     <td style={{ textAlign: 'right' }}>{invoice.numberOfNights}</td>
-                    <td style={{ textAlign: 'right' }}>₹{(invoice.roomCharges / invoice.numberOfNights).toLocaleString()}</td>
-                    <td style={{ textAlign: 'right' }}><strong>₹{invoice.roomCharges.toLocaleString()}</strong></td>
+                    <td style={{ textAlign: 'right' }}>LKR {(invoice.roomCharges / invoice.numberOfNights).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right' }}><strong>LKR {invoice.roomCharges.toLocaleString()}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -280,14 +344,14 @@ const InvoiceDetails = () => {
                         <td>{format(new Date(expense.date), 'MMM dd')}</td>
                         <td>{expense.category}</td>
                         <td>{expense.description}</td>
-                        <td style={{ textAlign: 'right' }}>₹{expense.amount.toLocaleString()}</td>
+                        <td style={{ textAlign: 'right' }}>LKR {expense.amount.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr style={{ fontWeight: 'bold' }}>
                       <td colSpan="3" style={{ textAlign: 'right' }}>Total Extra Charges:</td>
-                      <td style={{ textAlign: 'right' }}>₹{invoice.totalExtraExpenses.toLocaleString()}</td>
+                      <td style={{ textAlign: 'right' }}>LKR {invoice.totalExtraExpenses.toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -300,51 +364,51 @@ const InvoiceDetails = () => {
             <div style={{ maxWidth: '400px', marginLeft: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <span>Subtotal:</span>
-                <span>₹{invoice.subtotal.toLocaleString()}</span>
+                <span>LKR {invoice.subtotal.toLocaleString()}</span>
               </div>
 
               {invoice.taxAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span>Tax ({invoice.taxPercentage}%):</span>
-                  <span>₹{invoice.taxAmount.toLocaleString()}</span>
+                  <span>LKR {invoice.taxAmount.toLocaleString()}</span>
                 </div>
               )}
 
               {invoice.discountAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', color: '#10b981' }}>
                   <span>Discount {invoice.discountReason && `(${invoice.discountReason})`}:</span>
-                  <span>- ₹{invoice.discountAmount.toLocaleString()}</span>
+                  <span>- LKR {invoice.discountAmount.toLocaleString()}</span>
                 </div>
               )}
 
               {invoice.commissionAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.875rem', color: '#64748b' }}>
                   <span>Agent Commission:</span>
-                  <span>₹{invoice.commissionAmount.toLocaleString()}</span>
+                  <span>LKR {invoice.commissionAmount.toLocaleString()}</span>
                 </div>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', paddingTop: '0.75rem', borderTop: '2px solid #e2e8f0', fontSize: '1.25rem', fontWeight: 'bold' }}>
                 <span>Total Amount:</span>
-                <span style={{ color: '#2563eb' }}>₹{invoice.totalAmount.toLocaleString()}</span>
+                <span style={{ color: '#2563eb' }}>LKR {invoice.totalAmount.toLocaleString()}</span>
               </div>
 
               {invoice.advancePaid > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span>Advance Paid:</span>
-                  <span style={{ color: '#10b981' }}>₹{invoice.advancePaid.toLocaleString()}</span>
+                  <span style={{ color: '#10b981' }}>LKR {invoice.advancePaid.toLocaleString()}</span>
                 </div>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <span>Total Paid:</span>
-                <span style={{ color: '#10b981' }}>₹{invoice.totalPaid.toLocaleString()}</span>
+                <span style={{ color: '#10b981' }}>LKR {invoice.totalPaid.toLocaleString()}</span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.75rem', borderTop: '2px solid #e2e8f0', fontSize: '1.25rem', fontWeight: 'bold' }}>
                 <span>Balance Due:</span>
                 <span style={{ color: invoice.balanceDue > 0 ? '#f59e0b' : '#10b981' }}>
-                  ₹{invoice.balanceDue.toLocaleString()}
+                  LKR {balanceDue.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -372,7 +436,7 @@ const InvoiceDetails = () => {
                         <td>{payment.paymentMethod}</td>
                         <td>{payment.transactionId || '-'}</td>
                         <td>{payment.notes || '-'}</td>
-                        <td style={{ textAlign: 'right' }}><strong>₹{payment.amount.toLocaleString()}</strong></td>
+                        <td style={{ textAlign: 'right' }}><strong>LKR {payment.amount.toLocaleString()}</strong></td>
                       </tr>
                     ))}
                   </tbody>

@@ -6,7 +6,7 @@ const Booking = require("../models/Booking");
 const Invoice = require("../models/Invoice");
 const Guest = require("../models/Guest");
 const User = require("../models/User");
-const { runWithOptionalTransaction } = require("../utils/transactionHelper");
+const { runWithOptionalTransaction, withRoomLock } = require("../utils/transactionHelper");
 const { getActivePropertyId } = require("../middleware/propertyContext");
 
 /**
@@ -14,7 +14,7 @@ const { getActivePropertyId } = require("../middleware/propertyContext");
  * ["Cash", "Card", "Online", "PayHere", "Bank Transfer"]
  */
 function normalizePaymentMethod(method) {
-  if (!method) return "Cash";
+  if (!method) return null;
   const cleaned = String(method).trim().toLowerCase();
   if (cleaned.includes("cash")) return "Cash";
   if (cleaned.includes("card") || cleaned.includes("credit") || cleaned.includes("debit") || cleaned.includes("visa") || cleaned.includes("master")) {
@@ -25,7 +25,7 @@ function normalizePaymentMethod(method) {
   }
   if (cleaned.includes("payhere")) return "PayHere";
   if (cleaned.includes("online") || cleaned.includes("upi")) return "Online";
-  return "Cash";
+  return null;
 }
 
 /**
@@ -50,6 +50,43 @@ async function getReservationFinancials(reservationId, session = null) {
     collectedFromPayments,
     completedPayments
   };
+}
+
+async function getInvoicePaidAmount(invoice, session = null) {
+  let query = Payment.find({
+    invoice: invoice._id,
+    paymentStatus: { $in: ["completed", "partially_refunded"] }
+  });
+  if (session) query = query.session(session);
+  const ledgerPayments = await query.lean();
+
+  const ledgerPaid = ledgerPayments.reduce((sum, payment) => {
+    return sum + Math.max(0, Number(payment.amount || 0) - Number(payment.refundAmount || 0));
+  }, 0);
+
+  const unmatchedEmbeddedPayments = (invoice.payments || []).filter((embeddedPayment) => {
+    const embeddedAmount = Number(embeddedPayment.amount || 0);
+    const embeddedReference = embeddedPayment.transactionId ? String(embeddedPayment.transactionId) : null;
+    const embeddedTime = embeddedPayment.paymentDate ? new Date(embeddedPayment.paymentDate).getTime() : null;
+
+    return !ledgerPayments.some((ledgerPayment) => {
+      const ledgerReference = ledgerPayment.transactionId || ledgerPayment.paymentReference;
+      if (embeddedReference && ledgerReference && String(ledgerReference) === embeddedReference) return true;
+      if (Math.abs(Number(ledgerPayment.amount || 0) - embeddedAmount) > 0.001) return false;
+      if (!embeddedTime || !ledgerPayment.paymentDate) return false;
+      return Math.abs(new Date(ledgerPayment.paymentDate).getTime() - embeddedTime) < 60000;
+    });
+  });
+
+  const embeddedPaid = unmatchedEmbeddedPayments.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
+  return Math.max(
+    Number(invoice.totalPaid ?? invoice.advancePaid ?? 0),
+    ledgerPaid + embeddedPaid
+  );
 }
 
 /**
@@ -95,15 +132,41 @@ async function recordPayment(params) {
   }
 
   const normalizedMethod = normalizePaymentMethod(paymentMethod);
+  if (!normalizedMethod) {
+    const error = new Error("A valid payment method is required");
+    error.statusCode = 400;
+    throw error;
+  }
   const effectiveRef = transactionReference || transactionId || undefined;
 
-  // Idempotency check: if an idempotency key was provided and already succeeded
+  // Resolve the common lock key so reservation- and invoice-based requests for the
+  // same bill are serialized together within this process.
+  let lockKey = invoiceId || reservationId || bookingId;
+  if (reservationId && !invoiceId) {
+    const existingInvoice = await Invoice.findOne({ reservation: reservationId });
+    if (existingInvoice) lockKey = existingInvoice._id;
+  }
+
+  return await withRoomLock(lockKey, async () => {
+    // Idempotency check inside the lock also covers simultaneous retries.
   if (idempotencyKey) {
     const existing = await Payment.findOne({ idempotencyKey, paymentStatus: "completed" })
       .populate("user", "name email")
       .populate("reservation")
       .populate("booking");
     if (existing) {
+      const existingInvoiceId = existing.invoice?._id || existing.invoice;
+      const existingReservationId = existing.reservation?._id || existing.reservation;
+      const existingBookingId = existing.booking?._id || existing.booking;
+      if (
+        (invoiceId && existingInvoiceId && String(existingInvoiceId) !== String(invoiceId)) ||
+        (reservationId && existingReservationId && String(existingReservationId) !== String(reservationId)) ||
+        (bookingId && existingBookingId && String(existingBookingId) !== String(bookingId))
+      ) {
+        const error = new Error("Idempotency key is already used for a different payment");
+        error.statusCode = 409;
+        throw error;
+      }
       return {
         success: true,
         isIdempotentReplay: true,
@@ -118,6 +181,17 @@ async function recordPayment(params) {
     let reservation = null;
     let booking = null;
     let invoice = null;
+
+    if (invoiceId) {
+      let iq = Invoice.findById(invoiceId);
+      if (session) iq = iq.session(session);
+      invoice = await iq;
+      if (!invoice) {
+        const error = new Error("Invoice not found");
+        error.statusCode = 404;
+        throw error;
+      }
+    }
 
     if (reservationId) {
       let q = Reservation.findById(reservationId).populate("guest");
@@ -137,16 +211,18 @@ async function recordPayment(params) {
       }
     }
 
-    if (!reservation && invoiceId) {
-      let iq = Invoice.findById(invoiceId);
-      if (session) iq = iq.session(session);
-      invoice = await iq;
-
+    if (!reservation && invoice) {
       if (invoice?.reservation) {
         let rq = Reservation.findById(invoice.reservation).populate("guest");
         if (session) rq = rq.session(session);
         reservation = await rq;
       }
+    }
+
+    if (invoice && reservation && invoice.reservation.toString() !== reservation._id.toString()) {
+      const error = new Error("Reservation does not match the invoice");
+      error.statusCode = 400;
+      throw error;
     }
 
     // Try to find counterpart Booking if we resolved Reservation first
@@ -170,7 +246,7 @@ async function recordPayment(params) {
     }
 
     // 2. Prevent accidental duplicate rapid-fire submissions (within 3 seconds)
-    if (reservation) {
+    if (reservation && !idempotencyKey) {
       const recentDuplicate = await Payment.findOne({
         reservation: reservation._id,
         amount: paymentAmount,
@@ -189,20 +265,27 @@ async function recordPayment(params) {
     }
 
     // 3. Compute Authoritative Total and Outstanding Balance
-    const totalAmount = Number(
-      reservation?.totalAmount ?? invoice?.totalAmount ?? booking?.totalPrice ?? 0
-    );
+    if (invoice && (
+      invoice.status === "Cancelled" ||
+      invoice.paymentStatus === "Refunded"
+    )) {
+      const error = new Error("Payments cannot be recorded for a cancelled or refunded invoice");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const totalAmount = Number(invoice?.totalAmount ?? reservation?.totalAmount ?? booking?.totalPrice ?? 0);
 
     let currentPaid = 0;
-    if (reservation) {
+    if (invoice) {
+      currentPaid = await getInvoicePaidAmount(invoice, session);
+    } else if (reservation) {
       const fin = await getReservationFinancials(reservation._id, session);
       currentPaid = fin.collectedFromPayments;
       // Handle legacy records where advancePayment was set before Payment docs were recorded
       if (currentPaid === 0 && Number(reservation.advancePayment) > 0) {
         currentPaid = Number(reservation.advancePayment);
       }
-    } else if (invoice) {
-      currentPaid = Number(invoice.totalPaid || 0);
     }
 
     const outstandingBalance = Math.max(0, totalAmount - currentPaid);
@@ -315,7 +398,7 @@ async function recordPayment(params) {
         paymentDate: payment.paymentDate,
         amount: paymentAmount,
         paymentMethod: normalizedMethod,
-        transactionId: payment.paymentReference || effectiveRef,
+        transactionId: effectiveRef || payment.paymentReference,
         notes: notes || ""
       });
       invoice.totalPaid = newPaidAmount;
@@ -349,6 +432,7 @@ async function recordPayment(params) {
       paymentStatus: reservationPaymentStatus,
       isFullySettled
     };
+  });
   });
 }
 

@@ -66,3 +66,6 @@ backend/backups/
 .env.*.local
 backend/.env
 backend/.env.local
+
+# Generated QA test artifacts
+qa-artifacts/

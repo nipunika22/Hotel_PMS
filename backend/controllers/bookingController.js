@@ -388,7 +388,10 @@ exports.cancelBooking = async (req, res) => {
 
     // Revert room status back to Available
     if (booking.room) {
-      await Room.findByIdAndUpdate(booking.room, {
+      await Room.findOneAndUpdate({
+        _id: booking.room, status: "Reserved",
+        currentReservation: { $in: [booking.reservation || null, null] }
+      }, {
         status: "Available",
         currentReservation: null
       });

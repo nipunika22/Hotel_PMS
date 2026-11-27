@@ -68,7 +68,10 @@ const Rooms = () => {
       description: '',
       priority: 'Medium',
       estimatedCost: 0,
-      isBlocking: room.status !== 'Maintenance' && isSupervisor
+      isBlocking: room.status !== 'Maintenance' &&
+        room.status !== 'Occupied' &&
+        !room.currentReservation &&
+        isSupervisor
     });
     setShowMntModal(true);
   };
@@ -115,14 +118,14 @@ const Rooms = () => {
   };
 
   const handleCompleteCleaning = async (taskId, roomNumber) => {
-    if (!window.confirm(`Mark cleaning complete for Room #${roomNumber}? Room status will be restored to Available.`)) {
+    if (!window.confirm(`Mark cleaning complete for Room #${roomNumber}? The room will await supervisor inspection.`)) {
       return;
     }
     try {
       await housekeepingAPI.completeTask(taskId, {
         notes: `Completed via Room Management by ${user?.name || 'Staff'}`
       });
-      toast.success(`Room #${roomNumber} cleaning completed! Room is now Available.`);
+      toast.success(`Room #${roomNumber} cleaning completed. Room is awaiting inspection.`);
       fetchRooms();
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.error || 'Failed to complete cleaning');
@@ -221,7 +224,7 @@ const Rooms = () => {
           <div className="room-cards-grid">
             {filteredRooms.map((room) => {
               const displayStatus = (room.status === 'Cleaning')
-                ? (room.activeCleaningTask?.status === 'In Progress' ? 'Cleaning In Progress' : 'Cleaning Required')
+                ? ({ 'In Progress': 'Cleaning In Progress', Completed: 'Pending Inspection' }[room.activeCleaningTask?.status] || 'Cleaning Required')
                 : room.status;
 
               return (
@@ -239,7 +242,7 @@ const Rooms = () => {
                   {room.status === 'Cleaning' && room.activeCleaningTask && (
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
                       <span>
-                        {room.activeCleaningTask.status === 'In Progress' ? 'In progress' : 'Awaiting cleaning'}
+                        {({ 'In Progress': 'In progress', Completed: 'Awaiting supervisor inspection' }[room.activeCleaningTask.status] || 'Awaiting cleaning')}
                         {room.activeCleaningTask.assignedTo?.name ? ` • ${room.activeCleaningTask.assignedTo.name}` : ''}
                       </span>
                     </div>
@@ -257,12 +260,12 @@ const Rooms = () => {
                     <div className="table-actions">
                       <button type="button" onClick={() => setDetailRoom(room)} className="btn btn-icon btn-ghost btn-sm" title="View Room Details" aria-label="View room details"><FaEye /></button>
                       {/* Housekeeping Action Button if Room in Cleaning */}
-                      {room.status === 'Cleaning' && room.activeCleaningTask && (isSupervisor || ['staff', 'housekeeping'].includes(userRole)) && (
+                      {room.status === 'Cleaning' && room.activeCleaningTask?.status === 'In Progress' && (isSupervisor || ['staff', 'housekeeping'].includes(userRole)) && (
                         <button
                           type="button"
                           onClick={() => handleCompleteCleaning(room.activeCleaningTask._id, room.roomNumber)}
                           className="btn btn-icon btn-ghost btn-sm"
-                          title="Complete Cleaning & Restore Availability"
+                          title="Complete Cleaning"
                           aria-label="Complete Cleaning"
                           style={{ color: 'var(--color-success)' }}
                         >

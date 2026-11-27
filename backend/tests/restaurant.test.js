@@ -423,7 +423,7 @@ describe("RESTAURANT EXPERIENCE MODULE — Automated Comprehensive Test Suite", 
     assert.strictEqual(availBody.availableTablesCount, 0, "No table should be free in Bar Counter at conflicting time");
   });
 
-  it("11. Guest or staff can cancel a reservation", async () => {
+  it("11. A legacy guest can cancel after verifying the booking contact details", async () => {
     const azureTide = await Restaurant.findOne({ property: propAId, slug: "azure-tide" });
     const reservation = await RestaurantReservation.create({
       property: propAId,
@@ -438,15 +438,17 @@ describe("RESTAURANT EXPERIENCE MODULE — Automated Comprehensive Test Suite", 
       status: "CONFIRMED"
     });
 
-    const res = await fetch(`${BASE_URL}/restaurants/reservations/${reservation.confirmationNumber}/cancel`, {
+    const cancel = (identity) => fetch(`${BASE_URL}/restaurants/reservations/${reservation.confirmationNumber}/cancel`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         "x-property-id": propAId.toString()
       },
-      body: JSON.stringify({ reason: "Change of travel plans" })
+      body: JSON.stringify({ reason: "Change of travel plans", ...identity })
     });
 
+    assert.strictEqual((await cancel({})).status, 404, "A confirmation reference is not sufficient");
+    const res = await cancel({ email: reservation.email, phone: reservation.phone });
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert.strictEqual(body.data.status, "CANCELLED");
@@ -531,6 +533,37 @@ describe("RESTAURANT EXPERIENCE MODULE — Automated Comprehensive Test Suite", 
     const updated = await updateRes.json();
     assert.strictEqual(updated.data.tagline, "Sunset sips and wood-fired skewers");
 
+    const preserveRes = await fetch(`${BASE_URL}/restaurants/admin/restaurants/${createdId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+        "x-property-id": propAId.toString()
+      },
+      body: JSON.stringify({ description: "Updated venue description" })
+    });
+    assert.strictEqual(preserveRes.status, 200);
+    assert.strictEqual((await preserveRes.json()).data.tagline, "Sunset sips and wood-fired skewers");
+
+    for (const tagline of [42, "x".repeat(161)]) {
+      const invalidRes = await fetch(`${BASE_URL}/restaurants/admin/restaurants/${createdId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`,
+          "x-property-id": propAId.toString()
+        },
+        body: JSON.stringify({ tagline })
+      });
+      assert.strictEqual(invalidRes.status, 400);
+    }
+
+    const readRes = await fetch(`${BASE_URL}/restaurants/${created.data.slug}`, {
+      headers: { "x-property-id": propAId.toString() }
+    });
+    assert.strictEqual(readRes.status, 200);
+    assert.strictEqual((await readRes.json()).data.tagline, "Sunset sips and wood-fired skewers");
+
     // Clean up
     await Restaurant.findByIdAndDelete(createdId);
   });
@@ -573,6 +606,7 @@ describe("RESTAURANT EXPERIENCE MODULE — Automated Comprehensive Test Suite", 
       restaurant: azureTide._id,
       guestType: "Hotel Guest",
       hotelReservation: sampleHotelReservationId,
+      reservationTotalPrice: 32500,
       roomNumber: "Ocean Suite 301",
       confirmationNumber: `RST-FOLIO-TEST-${Date.now()}`,
       customerName: "Arthur Pendelton",
@@ -602,7 +636,7 @@ describe("RESTAURANT EXPERIENCE MODULE — Automated Comprehensive Test Suite", 
     const chargeBody = await chargeRes.json();
     assert.strictEqual(chargeBody.success, true);
     assert.strictEqual(chargeBody.data.reservation.billedToFolio, true);
-    assert.strictEqual(chargeBody.data.reservation.totalAmount, 32500);
+    assert.strictEqual(chargeBody.data.reservation.reservationTotalPrice, 32500);
 
     // Verify GuestExpense was created in database
     const expense = await GuestExpense.findOne({

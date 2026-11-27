@@ -6,6 +6,8 @@ import { reservationAPI, roomAPI, guestAPI, travelAgentAPI, invoiceAPI, guestExp
 import { toast } from 'react-toastify';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 
+const percentage = (part, total) => (total > 0 ? (part / total) * 100 : 0).toFixed(1);
+
 const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState({
@@ -77,6 +79,12 @@ const Reports = () => {
       setLoading(false);
     }
   };
+
+  const expenses = Array.isArray(stats.expenseSummary) ? stats.expenseSummary : [];
+  const totalExpenses = expenses.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
+  const totalExpenseCount = expenses.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+  const invoiceSummary = stats.revenue?.summary;
+  const invoiceStatuses = stats.revenue?.paymentStatusCount || [];
 
   if (loading && !stats.occupancy) {
     return <div className="loading"><div className="spinner"></div></div>;
@@ -192,7 +200,7 @@ const Reports = () => {
               <div className="stats-grid">
                 <div style={{ textAlign: 'center', padding: '1.5rem' }}>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>
-                    ₹{(stats.revenue.totalRevenue || 0).toLocaleString()}
+                    ₹{(invoiceSummary?.totalAmount || 0).toLocaleString()}
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.5rem' }}>
                     Total Revenue
@@ -201,7 +209,7 @@ const Reports = () => {
 
                 <div style={{ textAlign: 'center', padding: '1.5rem' }}>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>
-                    ₹{(stats.revenue.totalPaid || 0).toLocaleString()}
+                    ₹{(invoiceSummary?.totalPaid || 0).toLocaleString()}
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.5rem' }}>
                     Collected
@@ -210,7 +218,7 @@ const Reports = () => {
 
                 <div style={{ textAlign: 'center', padding: '1.5rem' }}>
                   <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f59e0b' }}>
-                    ₹{(stats.revenue.totalPending || 0).toLocaleString()}
+                    ₹{(invoiceSummary?.totalDue || 0).toLocaleString()}
                   </div>
                   <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.5rem' }}>
                     Pending
@@ -218,15 +226,15 @@ const Reports = () => {
                 </div>
               </div>
 
-              {stats.revenue.paymentStatusBreakdown && (
+              {invoiceStatuses.length > 0 && (
                 <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
                   <h4 style={{ marginBottom: '1rem' }}>Payment Status Breakdown</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                    {Object.entries(stats.revenue.paymentStatusBreakdown).map(([status, data]) => (
+                    {invoiceStatuses.map(({ _id: status, count }) => (
                       <div key={status} style={{ padding: '0.75rem', background: 'white', borderRadius: '6px' }}>
                         <div style={{ fontSize: '0.875rem', color: '#64748b' }}>{status}</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginTop: '0.25rem' }}>
-                          {data.count} ({data.percentage.toFixed(1)}%)
+                          {count} ({percentage(count, invoiceSummary?.totalInvoices)}%)
                         </div>
                       </div>
                     ))}
@@ -442,7 +450,7 @@ const Reports = () => {
             </div>
           </div>
 
-          {stats.expenseSummary && stats.expenseSummary.length > 0 ? (
+          {expenses.length > 0 ? (
             <div className="table-container">
               <table className="table">
                 <thead>
@@ -454,21 +462,21 @@ const Reports = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.expenseSummary.map((item) => (
+                  {expenses.map((item) => (
                     <tr key={item._id}>
                       <td><strong>{item._id}</strong></td>
                       <td>{item.count}</td>
-                      <td>₹{item.totalAmount.toLocaleString()}</td>
-                      <td>{item.percentage.toFixed(1)}%</td>
+                      <td>₹{(Number(item.totalAmount) || 0).toLocaleString()}</td>
+                      <td>{percentage(Number(item.totalAmount) || 0, totalExpenses)}%</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr style={{ fontWeight: 'bold', background: '#f8fafc' }}>
                     <td>Total</td>
-                    <td>{stats.expenseSummary.reduce((sum, item) => sum + item.count, 0)}</td>
-                    <td>₹{stats.expenseSummary.reduce((sum, item) => sum + item.totalAmount, 0).toLocaleString()}</td>
-                    <td>100%</td>
+                    <td>{totalExpenseCount}</td>
+                    <td>₹{totalExpenses.toLocaleString()}</td>
+                    <td>{percentage(totalExpenses, totalExpenses)}%</td>
                   </tr>
                 </tfoot>
               </table>

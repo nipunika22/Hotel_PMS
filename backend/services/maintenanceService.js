@@ -3,8 +3,8 @@ const MaintenanceTicket = require("../models/MaintenanceTicket");
 const Room = require("../models/Room");
 const User = require("../models/User");
 const Reservation = require("../models/Reservation");
-const HousekeepingTask = require("../models/HousekeepingTask");
-const { withRoomLock } = require("../utils/transactionHelper");
+const { assertVacant, queueCleaningTask } = require("./housekeepingService");
+const { withRoomLock, runWithOptionalTransaction } = require("../utils/transactionHelper");
 
 const ALLOWED_TICKET_TRANSITIONS = {
   Reported: ["Assigned", "In Progress", "Closed"],
@@ -158,56 +158,21 @@ async function blockRoomForMaintenance(roomId, reason, userId = null, ticketId =
 async function releaseMaintenanceRoom(roomId, userId = null, ticketId = null, session = null) {
   const targetRoomId = roomId._id || roomId;
 
-  return withRoomLock(targetRoomId, async () => {
-    let roomQuery = Room.findById(targetRoomId);
-    if (session) roomQuery = roomQuery.session(session);
-    const room = await roomQuery;
-
+  const release = async (session) => {
+    const room = await Room.findById(targetRoomId).session(session);
     if (!room) {
       const err = new Error("Room not found");
       err.statusCode = 404;
       throw err;
     }
-
-    // 1. Transition room to Cleaning / Dirty (NEVER directly to Available!)
-    room.status = "Cleaning";
-    room.cleaningStatus = "Dirty";
+    await assertVacant(room, session);
     room.maintenanceNotes = "";
-    await room.save({ session });
-
-    // 2. Create or reuse Maintenance Cleaning HousekeepingTask
-    let existingTaskQuery = HousekeepingTask.findOne({
-      room: targetRoomId,
+    const { task: housekeepingTask } = await queueCleaningTask(room, {
       taskType: "Maintenance Cleaning",
-      status: { $ne: "Inspected" }
-    });
-    if (session) existingTaskQuery = existingTaskQuery.session(session);
-    let housekeepingTask = await existingTaskQuery;
-
-    if (!housekeepingTask) {
-      let propId = room.property;
-      if (!propId) {
-        const { getActivePropertyId } = require("../middleware/propertyContext");
-        propId = await getActivePropertyId();
-      }
-
-      housekeepingTask = new HousekeepingTask({
-        property: propId,
-        room: targetRoomId,
-        taskType: "Maintenance Cleaning",
-        status: "Pending",
-        priority: "High",
-        notes: `Post-maintenance sanitization & cleaning${ticketId ? ` for ticket ${ticketId}` : ""}`,
-        createdBy: userId || null,
-        auditLog: [{
-          action: "TASK_CREATED",
-          performedBy: userId || null,
-          timestamp: new Date(),
-          details: "Automated maintenance cleaning task created on room release from maintenance"
-        }]
-      });
-      await housekeepingTask.save({ session });
-    }
+      notes: `Post-maintenance sanitization & cleaning${ticketId ? ` for ticket ${ticketId}` : ""}`,
+      userId,
+      newTurnover: ["Maintenance", "Out of Order"].includes(room.status)
+    }, session);
 
     // 3. Log ROOM_RELEASED on ticket
     if (ticketId) {
@@ -224,7 +189,8 @@ async function releaseMaintenanceRoom(roomId, userId = null, ticketId = null, se
     }
 
     return { room, housekeepingTask };
-  });
+  };
+  return session ? release(session) : withRoomLock(targetRoomId, () => runWithOptionalTransaction(release));
 }
 
 /**

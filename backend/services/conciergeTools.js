@@ -11,7 +11,7 @@ const Restaurant = require("../models/Restaurant");
 const RestaurantMenuItem = require("../models/RestaurantMenuItem");
 const RestaurantMenuCategory = require("../models/RestaurantMenuCategory");
 const RestaurantOffer = require("../models/RestaurantOffer");
-const { getAvailableRoomIds, parseStayDates } = require("./availabilityService");
+const { getUnavailableRoomIds, parseStayDates } = require("./availabilityService");
 
 /**
  * 1. getHotelInformation
@@ -143,13 +143,13 @@ async function checkRoomAvailability({ propertyId, checkInDate, checkOutDate, ro
 
   try {
     // Authoritative conflict detection against active Reservations and Bookings
-    const bookedRoomIds = await getAvailableRoomIds(stayDates.checkIn, stayDates.checkOut, propertyId);
+    const bookedRoomIds = await getUnavailableRoomIds(stayDates.checkIn, stayDates.checkOut, propertyId);
 
     const query = {
       property: propertyId,
       _id: { $nin: bookedRoomIds },
       status: { $nin: ["Maintenance", "Out of Order", "Occupied", "Cleaning"] },
-      cleaningStatus: { $ne: "Dirty" },
+      cleaningStatus: { $nin: ["Dirty", "Pickup"] },
       isActive: true
     };
 

@@ -21,6 +21,9 @@ import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import { StatsSkeleton } from '../components/ui/LoadingSkeleton';
 
+const canProcessRoom = (room) => room && !['Occupied', 'Maintenance', 'Out of Order'].includes(room.status);
+const canStartTask = (task) => ['Pending', 'Assigned', 'Needs Recleaning'].includes(task.status);
+
 const HousekeepingEnhanced = () => {
   const { user } = useAuth();
   const isHousekeeper = user?.role === 'housekeeping';
@@ -32,7 +35,9 @@ const HousekeepingEnhanced = () => {
   const [rooms, setRooms] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(isHousekeeper ? 'my-tasks' : 'tasks');
+  const [submitting, setSubmitting] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+  const [activeTab, setActiveTab] = useState('tasks');
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('All');
@@ -68,46 +73,40 @@ const HousekeepingEnhanced = () => {
   // Load data
   const fetchData = useCallback(async () => {
     setLoading(true);
-    try {
-      if (isHousekeeper) {
-        const res = await housekeepingAPI.getMyTasks();
-        const taskList = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
-        setTasks(taskList);
-      } else {
-        const [tasksRes, roomsRes, staffRes] = await Promise.all([
-          housekeepingAPI.getTasks({
-            status: filterStatus !== 'All' ? filterStatus : undefined,
-            room: filterRoom.trim() ? filterRoom.trim() : undefined
-          }),
-          roomAPI.getRooms(),
-          housekeepingAPI.getStaff()
-        ]);
-        const taskList = Array.isArray(tasksRes.data) ? tasksRes.data : (tasksRes.data?.tasks || []);
-        const roomList = Array.isArray(roomsRes.data) ? roomsRes.data : (roomsRes.data?.rooms || []);
-        const staffArr = Array.isArray(staffRes.data) ? staffRes.data : (staffRes.data?.staff || []);
-        setTasks(taskList);
-        setRooms(roomList);
-        setStaffList(staffArr);
-      }
-    } catch (err) {
-      toast.error('Failed to load housekeeping data');
-    } finally {
-      setLoading(false);
-    }
-  }, [isHousekeeper, filterStatus, filterRoom]);
+    const [taskResult, roomResult, staffResult] = await Promise.allSettled([
+      housekeepingAPI.getTasks(),
+      roomAPI.getRooms(),
+      canManage ? housekeepingAPI.getStaff() : Promise.resolve({ data: [] })
+    ]);
+    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data);
+    else toast.error('Failed to load housekeeping tasks');
+    if (roomResult.status === 'fulfilled') setRooms(roomResult.value.data);
+    else toast.error('Failed to load room readiness');
+    if (staffResult.status === 'fulfilled') setStaffList(staffResult.value.data);
+    else toast.error('Failed to load housekeeping staff');
+    setLoading(false);
+  }, [canManage]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   // Handlers
-  const handleStartTask = async (taskId) => {
+  const handleStartTask = async (room, task = null) => {
+    if (!window.confirm(`Start cleaning Room #${room.roomNumber}?`)) return;
+    setSubmitting(true);
     try {
-      await housekeepingAPI.startTask(taskId);
-      toast.success('Task started');
-      fetchData();
+      const cleaningTask = task || (await housekeepingAPI.createTask({
+        roomId: room._id,
+        taskType: 'Daily Cleaning'
+      })).data;
+      await housekeepingAPI.startTask(cleaningTask._id);
+      toast.success(`Cleaning started for Room #${room.roomNumber}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to start task');
+      toast.error(err.response?.data?.error || 'Failed to start cleaning');
+    } finally {
+      setSubmitting(false);
+      fetchData();
     }
   };
 
@@ -123,7 +122,8 @@ const HousekeepingEnhanced = () => {
   };
 
   const handleSubmitComplete = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask || submitting) return;
+    setSubmitting(true);
     try {
       const payload = {
         notes: completeData.notes
@@ -137,12 +137,14 @@ const HousekeepingEnhanced = () => {
         }];
       }
       await housekeepingAPI.completeTask(selectedTask._id, payload);
-      toast.success('Room cleaning completed! Room status restored to Available.');
+      toast.success('Cleaning completed. Room is awaiting inspection.');
       setShowCompleteModal(false);
       setSelectedTask(null);
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to complete task');
+      toast.error(err.response?.data?.error || 'Failed to complete task');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -156,7 +158,8 @@ const HousekeepingEnhanced = () => {
   };
 
   const handleSubmitInspect = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask || submitting) return;
+    setSubmitting(true);
     try {
       await housekeepingAPI.inspectTask(selectedTask._id, inspectData);
       toast.success(
@@ -168,7 +171,9 @@ const HousekeepingEnhanced = () => {
       setSelectedTask(null);
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to submit inspection');
+      toast.error(err.response?.data?.error || 'Failed to submit inspection');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -179,7 +184,30 @@ const HousekeepingEnhanced = () => {
       toast.success('Staff assigned');
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to assign staff');
+      toast.error(err.response?.data?.error || 'Failed to assign staff');
+    }
+  };
+
+  const showTasks = (roomNumber = '') => {
+    setFilterStatus('All');
+    setFilterRoom(String(roomNumber));
+    setActiveTab('tasks');
+  };
+
+  const handleSyncTasks = async () => {
+    if (!window.confirm('Synchronize housekeeping tasks for this property?')) return;
+    setSubmitting(true);
+    setSyncResult(null);
+    try {
+      const response = await housekeepingAPI.syncTasks();
+      setSyncResult(response.data);
+      showTasks();
+      await fetchData();
+      toast.success('Housekeeping synchronization completed');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to synchronize housekeeping tasks');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -189,15 +217,24 @@ const HousekeepingEnhanced = () => {
       toast.error('Please select a room');
       return;
     }
+    if (!canProcessRoom(rooms.find(room => room._id === createTaskData.roomId))) {
+      toast.error('Select a room that is eligible for housekeeping');
+      return;
+    }
+    setSubmitting(true);
     try {
-      await housekeepingAPI.createTask({
+      const result = await housekeepingAPI.createTask({
         roomId: createTaskData.roomId,
         taskType: createTaskData.taskType,
         priority: createTaskData.priority,
         assignedTo: createTaskData.assignedTo || undefined,
         notes: createTaskData.notes
       });
-      toast.success('Housekeeping task created');
+      const task = result.data;
+      toast.success(result.status === 201
+        ? `Cleaning task created for Room #${task.room.roomNumber}`
+        : `Existing cleaning task reused for Room #${task.room.roomNumber}`);
+      showTasks(task.room.roomNumber);
       setShowCreateModal(false);
       setCreateTaskData({
         roomId: '',
@@ -206,17 +243,62 @@ const HousekeepingEnhanced = () => {
         assignedTo: '',
         notes: ''
       });
-      fetchData();
+      await fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create task');
+      toast.error(err.response?.data?.error || 'Failed to create task');
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  const renderCleaningActions = (room, task) => {
+    if (!canProcessRoom(room)) return null;
+    if (!task) {
+      if (!canManage || (room.status !== 'Cleaning' && !['Dirty', 'Pickup'].includes(room.cleaningStatus))) return null;
+      return (
+        <button className="btn btn-sm btn-info" onClick={() => handleStartTask(room)} disabled={loading || submitting}>
+          <FaPlay /> Start Cleaning
+        </button>
+      );
+    }
+
+    if (task.status === 'Completed' && isSupervisor && room.status === 'Cleaning' && room.cleaningStatus === 'Clean') {
+      return (
+        <button className="btn btn-sm btn-primary" onClick={() => handleOpenInspectModal({ ...task, room })} disabled={loading || submitting}>
+          <FaClipboardCheck /> Inspect Room
+        </button>
+      );
+    }
+
+    const assignee = task.assignedTo?._id || task.assignedTo;
+    if (!isSupervisor && assignee && String(assignee) !== String(user?._id || user?.id)) return null;
+    if (canStartTask(task)) {
+      return (
+        <button className="btn btn-sm btn-info" onClick={() => handleStartTask(room, task)} disabled={loading || submitting}>
+          <FaPlay /> Start Cleaning
+        </button>
+      );
+    }
+    if (task.status === 'In Progress') {
+      return (
+        <button className="btn btn-sm btn-success" onClick={() => handleOpenCompleteModal({ ...task, room })} disabled={loading || submitting}>
+          <FaCheck /> Complete Cleaning
+        </button>
+      );
+    }
+    return null;
+  };
+
+  const visibleTasks = tasks.filter(task =>
+    (filterStatus === 'All' || task.displayStatus === filterStatus) &&
+    String(task.room?.roomNumber || '').toLowerCase().includes(filterRoom.trim().toLowerCase())
+  );
 
   // Stats calculation
   const stats = {
     total: tasks.length,
     inProgress: tasks.filter(t => t.status === 'In Progress').length,
-    completed: tasks.filter(t => t.status === 'Completed').length,
+    completed: tasks.filter(t => t.displayStatus === 'Pending Inspection').length,
     pending: tasks.filter(t => ['Pending', 'Assigned', 'Needs Recleaning'].includes(t.status)).length,
     inspected: tasks.filter(t => t.status === 'Inspected').length
   };
@@ -233,22 +315,43 @@ const HousekeepingEnhanced = () => {
   return (
     <div className="content-wrapper">
       <PageHeader 
-        title={isHousekeeper ? "My Housekeeping Tasks" : "Housekeeping & Room Status"}
+        title="Housekeeping & Room Status"
         subtitle={
           isHousekeeper 
-            ? "Manage your assigned cleaning tasks, update progress, and record lost items."
+            ? "Manage assigned and unassigned cleaning tasks, update progress, and record lost items."
             : "Monitor room hygiene lifecycles, staff assignments, and supervisor room inspections."
         }
       >
         <button onClick={fetchData} className="btn btn-outline">
           <FaSyncAlt /> Refresh
         </button>
+        {isSupervisor && (
+          <button onClick={handleSyncTasks} disabled={loading || submitting} className="btn btn-outline">
+            <FaSyncAlt /> Sync Housekeeping Tasks
+          </button>
+        )}
         {canManage && (
           <button onClick={() => setShowCreateModal(true)} className="btn btn-primary">
             <FaPlus /> Create Task
           </button>
         )}
       </PageHeader>
+
+      {syncResult && (
+        <div role="status" className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+          <strong>Housekeeping sync results</strong>
+          <div>{syncResult.created} created · {syncResult.reused} reused · {syncResult.skipped} rooms skipped</div>
+          <div>{syncResult.duplicateTasks} duplicate active tasks · {syncResult.invalidRoomReferences} invalid room references · {syncResult.invalidStatuses} invalid task statuses</div>
+          {Boolean(syncResult.duplicateTasks || syncResult.invalidRoomReferences || syncResult.invalidStatuses) && (
+            <details>
+              <summary>Record IDs to review</summary>
+              {syncResult.duplicateTasks > 0 && <div>Rooms with duplicate tasks: {syncResult.issues.duplicateRoomIds.join(', ')}</div>}
+              {syncResult.invalidRoomReferences > 0 && <div>Tasks with invalid room references: {syncResult.issues.invalidRoomTaskIds.join(', ')}</div>}
+              {syncResult.invalidStatuses > 0 && <div>Tasks with invalid statuses: {syncResult.issues.invalidStatusTaskIds.join(', ')}</div>}
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Summary KPI Cards */}
       <div className="stats-grid" style={{ marginBottom: 'var(--space-6)' }}>
@@ -282,26 +385,24 @@ const HousekeepingEnhanced = () => {
         </div>
       </div>
 
-      {/* Navigation tabs for Manager/Admin */}
-      {canManage && (
-        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
-          <button 
-            className={`btn ${activeTab === 'tasks' ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setActiveTab('tasks')}
-          >
-            <FaBroom /> Tasks ({tasks.length})
-          </button>
-          <button 
-            className={`btn ${activeTab === 'rooms' ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setActiveTab('rooms')}
-          >
-            <FaBed /> Room Readiness Overview ({rooms.length})
-          </button>
-        </div>
-      )}
+      {/* Housekeeping views */}
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+        <button
+          className={`btn ${activeTab === 'tasks' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setActiveTab('tasks')}
+        >
+          <FaBroom /> Tasks ({tasks.length})
+        </button>
+        <button
+          className={`btn ${activeTab === 'rooms' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => setActiveTab('rooms')}
+        >
+          <FaBed /> Room Readiness Overview ({rooms.length})
+        </button>
+      </div>
 
       {/* Filter toolbar for tasks */}
-      {activeTab === 'tasks' && canManage && (
+      {activeTab === 'tasks' && (
         <div className="card" style={{ marginBottom: 'var(--space-6)', padding: 'var(--space-4)' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4)', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
@@ -317,7 +418,8 @@ const HousekeepingEnhanced = () => {
                 <option value="Pending">Pending</option>
                 <option value="Assigned">Assigned</option>
                 <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed (Pending Inspection)</option>
+                <option value="Pending Inspection">Pending Inspection</option>
+                <option value="Completed">Completed</option>
                 <option value="Inspected">Inspected</option>
                 <option value="Needs Recleaning">Needs Recleaning</option>
               </select>
@@ -367,11 +469,14 @@ const HousekeepingEnhanced = () => {
                   <th>Operational Status</th>
                   <th>Hygiene Status</th>
                   <th>Sellable?</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rooms.map(room => {
-                  const isBlocked = ['Cleaning', 'Maintenance', 'Out of Order', 'Occupied', 'Reserved'].includes(room.status) || room.cleaningStatus === 'Dirty';
+                  const task = room.activeCleaningTask;
+                  const isBlocked = room.status !== 'Available' || ['Dirty', 'Pickup'].includes(room.cleaningStatus);
+                  const pendingInspection = room.status === 'Cleaning' && room.cleaningStatus === 'Clean' && task?.status === 'Completed';
                   return (
                     <tr key={room._id}>
                       <td><strong>#{room.roomNumber}</strong></td>
@@ -381,10 +486,13 @@ const HousekeepingEnhanced = () => {
                       <td><StatusBadge status={room.cleaningStatus || 'Dirty'} /></td>
                       <td>
                         {isBlocked ? (
-                          <span className="badge badge-danger">Blocked / Unready</span>
+                          <span className={`badge ${pendingInspection ? 'badge-warning' : 'badge-danger'}`}>{pendingInspection ? 'Pending Inspection' : 'Blocked / Unready'}</span>
                         ) : (
                           <span className="badge badge-success">Available for Booking</span>
                         )}
+                      </td>
+                      <td>
+                        <div className="table-actions">{renderCleaningActions(room, task)}</div>
                       </td>
                     </tr>
                   );
@@ -398,12 +506,12 @@ const HousekeepingEnhanced = () => {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <FaBroom /> {isHousekeeper ? 'My Tasks' : 'Operational Housekeeping Tasks'}
+              <FaBroom /> {isHousekeeper ? 'Assigned and Unassigned Tasks' : 'Operational Housekeeping Tasks'}
             </h3>
-            <span className="badge badge-primary">{tasks.length}</span>
+            <span className="badge badge-primary">{visibleTasks.length}</span>
           </div>
 
-          {tasks.length === 0 ? (
+          {visibleTasks.length === 0 ? (
             <div className="card-body" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-8)' }}>
               <p>No housekeeping tasks found matching current filters.</p>
             </div>
@@ -423,7 +531,7 @@ const HousekeepingEnhanced = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.map(task => {
+                  {visibleTasks.map(task => {
                     const roomNumber = task.room?.roomNumber || 'N/A';
                     const roomStatus = task.room?.status;
                     const cleaningStatus = task.room?.cleaningStatus;
@@ -432,6 +540,7 @@ const HousekeepingEnhanced = () => {
                       <tr key={task._id}>
                         <td>
                           <strong>#{roomNumber}</strong>
+                          <div>{task.room?.roomType}</div>
                           <div style={{ fontSize: '0.75rem', marginTop: '2px' }}>
                             <StatusBadge status={roomStatus} />{' '}
                             <StatusBadge status={cleaningStatus} />
@@ -452,9 +561,9 @@ const HousekeepingEnhanced = () => {
                           )}
                         </td>
                         <td><StatusBadge status={task.priority} /></td>
-                        <td><StatusBadge status={task.status} /></td>
+                        <td><StatusBadge status={task.displayStatus} /></td>
                         <td>
-                          {canManage && task.status !== 'Inspected' ? (
+                          {canManage && task.isCurrent && canStartTask(task) ? (
                             <select 
                               className="form-control" 
                               style={{ fontSize: '0.85rem', padding: '2px 6px', height: 'auto' }}
@@ -475,7 +584,7 @@ const HousekeepingEnhanced = () => {
                           )}
                         </td>
                         <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          <div>Created: {new Date(task.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          <div>Created: {new Date(task.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div>
                           {task.startedAt && (
                             <div>Started: {new Date(task.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                           )}
@@ -501,49 +610,8 @@ const HousekeepingEnhanced = () => {
                         </td>
                         <td>
                           <div className="table-actions">
-                            {/* Housekeeping / Staff Actions */}
-                            {['Pending', 'Assigned', 'Needs Recleaning'].includes(task.status) && (
-                              <button 
-                                className="btn btn-sm btn-info"
-                                onClick={() => handleStartTask(task._id)}
-                                title="Start Cleaning"
-                              >
-                                <FaPlay /> Start
-                              </button>
-                            )}
-
-                            {task.status === 'In Progress' && (
-                              <button 
-                                className="btn btn-sm btn-success"
-                                onClick={() => handleOpenCompleteModal(task)}
-                                title="Complete Cleaning & Restore Availability"
-                              >
-                                <FaCheck /> Complete
-                              </button>
-                            )}
-
-                            {/* Direct complete for admin/manager or staff if needed */}
-                            {canManage && ['Pending', 'Assigned'].includes(task.status) && (
-                              <button 
-                                className="btn btn-sm btn-outline"
-                                onClick={() => handleOpenCompleteModal(task)}
-                                title="Complete Cleaning Directly"
-                                style={{ marginLeft: '4px' }}
-                              >
-                                <FaCheck /> Quick Complete
-                              </button>
-                            )}
-
-                            {/* Supervisor Inspection Action */}
-                            {task.status === 'Completed' && isSupervisor && (
-                              <button 
-                                className="btn btn-sm btn-primary"
-                                onClick={() => handleOpenInspectModal(task)}
-                                title="Inspect Room"
-                              >
-                                <FaClipboardCheck /> Inspect
-                              </button>
-                            )}
+                            {task.isCurrent &&
+                              renderCleaningActions(task.room, task)}
                           </div>
                         </td>
                       </tr>
@@ -566,7 +634,7 @@ const HousekeepingEnhanced = () => {
                   <FaCheck style={{ color: 'var(--color-success)' }} /> Complete Room Cleaning
                 </h3>
                 <p className="modal-description">
-                  Room #{selectedTask.room?.roomNumber} — Mark cleaning complete. Room status will be restored to Available for new guest bookings.
+                  Confirm cleaning is complete for Room #{selectedTask.room?.roomNumber}. A supervisor must inspect the room before it can be released.
                 </p>
               </div>
               <button className="modal-close" onClick={() => setShowCompleteModal(false)} aria-label="Close">
@@ -631,7 +699,7 @@ const HousekeepingEnhanced = () => {
               <button className="btn btn-outline" onClick={() => setShowCompleteModal(false)}>
                 Cancel
               </button>
-              <button className="btn btn-success" onClick={handleSubmitComplete}>
+              <button className="btn btn-success" onClick={handleSubmitComplete} disabled={submitting}>
                 Submit Cleaning
               </button>
             </div>
@@ -649,7 +717,7 @@ const HousekeepingEnhanced = () => {
                   <FaClipboardCheck style={{ color: 'var(--color-info)' }} /> Supervisor Inspection
                 </h3>
                 <p className="modal-description">
-                  Room #{selectedTask.room?.roomNumber} — Verify cleaning quality before releasing to Available.
+                  Confirm the inspection result for Room #{selectedTask.room?.roomNumber}. A rejected room returns to the cleaning queue.
                 </p>
               </div>
               <button className="modal-close" onClick={() => setShowInspectModal(false)} aria-label="Close">
@@ -709,8 +777,9 @@ const HousekeepingEnhanced = () => {
               <button 
                 className={`btn ${inspectData.approved ? 'btn-success' : 'btn-danger'}`}
                 onClick={handleSubmitInspect}
+                disabled={submitting}
               >
-                {inspectData.approved ? 'Approve & Release Room' : 'Reject Cleaning'}
+                {inspectData.approved ? 'Approve & Make Available' : 'Reject Inspection'}
               </button>
             </div>
           </div>
@@ -736,20 +805,28 @@ const HousekeepingEnhanced = () => {
 
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Select Room *</label>
+                  <label className="form-label" htmlFor="housekeeping-task-room">Select Room *</label>
                   <select 
+                    id="housekeeping-task-room"
                     className="form-control"
+                    aria-describedby="housekeeping-task-room-help"
                     required
                     value={createTaskData.roomId}
                     onChange={(e) => setCreateTaskData({ ...createTaskData, roomId: e.target.value })}
                   >
-                    <option value="">-- Choose a Room --</option>
-                    {rooms.map(r => (
-                      <option key={r._id} value={r._id}>
-                        Room #{r.roomNumber} ({r.roomType} - {r.status} / {r.cleaningStatus})
+                    <option value="" disabled>{loading ? 'Loading rooms…' : 'Choose a room'}</option>
+                    {rooms.map(room => (
+                      <option key={room._id} value={room._id} disabled={!canProcessRoom(room)}>
+                        Room #{room.roomNumber} ({room.roomType} · {room.status} / {room.cleaningStatus})
+                        {room.status === 'Occupied' && ' · Awaiting checkout'}
                       </option>
                     ))}
                   </select>
+                  <div id="housekeeping-task-room-help" className="text-muted">
+                    {rooms.length === 0 && !loading
+                      ? 'No rooms are listed for this property. Close this form and refresh Housekeeping.'
+                      : 'Occupied rooms can be selected after checkout. Rooms under maintenance must be released first.'}
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -814,7 +891,7 @@ const HousekeepingEnhanced = () => {
                 <button type="button" className="btn btn-outline" onClick={() => setShowCreateModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary" disabled={loading || submitting || !createTaskData.roomId}>
                   Create Task
                 </button>
               </div>

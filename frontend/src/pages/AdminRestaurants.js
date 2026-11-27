@@ -19,7 +19,7 @@ import {
   FaFilter,
   FaTag
 } from 'react-icons/fa';
-import { restaurantAPI } from '../services/api';
+import { restaurantAPI, restaurantOperationsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import './RestaurantExperience.css';
@@ -193,6 +193,36 @@ const AdminRestaurants = () => {
       if (s.data?.data) setStats(s.data.data);
     } catch (err) {
       toast.error('Failed to update reservation status');
+    }
+  };
+
+  const handleMarkArrived = async (reservation) => {
+    const restaurantId = reservation.restaurant?._id || reservation.restaurant;
+    if (!restaurantId) {
+      toast.error('This reservation is missing its restaurant assignment');
+      return;
+    }
+    try {
+      await restaurantOperationsAPI.arrive(restaurantId, reservation._id);
+      toast.success('Guest marked as arrived');
+      loadReservations();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to mark guest as arrived');
+    }
+  };
+
+  const handleSeatArrivedGuest = async (reservation) => {
+    const restaurantId = reservation.restaurant?._id || reservation.restaurant;
+    if (!restaurantId) {
+      toast.error('This reservation is missing its restaurant assignment');
+      return;
+    }
+    try {
+      await restaurantOperationsAPI.seat(restaurantId, reservation._id);
+      toast.success('Guest seated');
+      loadReservations();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to seat guest');
     }
   };
 
@@ -635,6 +665,7 @@ const AdminRestaurants = () => {
                         </span>
                         <div style={{ marginTop: '0.35rem', fontSize: '0.76rem', color: 'var(--c-text-muted)' }}>
                           Payment: <strong>{r.paymentStatus || 'Unpaid'}</strong>
+                          {r.paymentReconciliationRequired && <div role="status">Payment reconciliation required</div>}
                         </div>
                       </td>
                       <td>
@@ -668,12 +699,22 @@ const AdminRestaurants = () => {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                          {r.status !== 'SEATED' && r.status !== 'COMPLETED' && r.status !== 'CANCELLED' && (
+                          {['PENDING', 'CONFIRMED'].includes(r.status) && (r.arrivalStatus || 'EXPECTED') !== 'ARRIVED' && (
                             <button
                               type="button"
-                              title="Mark Seated"
+                              title="Mark guest as arrived"
                               style={{ padding: '0.4rem 0.6rem', background: '#E3F2FD', color: '#1565C0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.76rem' }}
-                              onClick={() => handleUpdateStatus(r._id, 'SEATED')}
+                              onClick={() => handleMarkArrived(r)}
+                            >
+                              Mark Arrived
+                            </button>
+                          )}
+                          {['PENDING', 'CONFIRMED'].includes(r.status) && r.arrivalStatus === 'ARRIVED' && (
+                            <button
+                              type="button"
+                              title="Seat arrived guest"
+                              style={{ padding: '0.4rem 0.6rem', background: '#E3F2FD', color: '#1565C0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.76rem' }}
+                              onClick={() => handleSeatArrivedGuest(r)}
                             >
                               Seat
                             </button>

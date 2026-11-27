@@ -28,6 +28,16 @@ const ROUTE_TITLES = {
   '/travel-agents/new': { title: 'Add Travel Agent', category: 'Management' },
   '/reports': { title: 'Operational Analytics & Reports', category: 'Management' },
   '/admin/notifications': { title: 'Notification Management & Campaigns', category: 'Management' },
+  '/admin/restaurants': { title: 'Restaurants & Dining', category: 'Restaurant Management' },
+  '/admin/restaurants/dashboard': { title: 'Restaurant Dashboard', category: 'Restaurant Management' },
+  '/admin/menu-management': { title: 'Menu Management', category: 'Restaurant Management' },
+  '/admin/dining-offers': { title: 'Restaurant & Dining Offers', category: 'Restaurant Management' },
+  '/admin/events': { title: 'Events, Halls & Enquiries', category: 'Event Management' },
+  '/admin/events/dashboard': { title: 'Event Dashboard', category: 'Event Management' },
+  '/admin/payments': { title: 'Payment Transactions', category: 'Finance' },
+  '/admin/finance': { title: 'Financial Dashboard', category: 'Finance' },
+  '/admin/attendance': { title: 'Attendance Review', category: 'People & Operations' },
+  '/staff-attendance': { title: 'My Attendance', category: 'People & Operations' },
   '/notifications': { title: 'Staff Notification Centre', category: 'Account' },
   '/profile': { title: 'Staff Profile & Security', category: 'Account' }
 };
@@ -78,7 +88,7 @@ const AdminTopbar = ({ onToggleSidebar }) => {
 
   // Determine current page info
   const path = location.pathname;
-  const currentRoute = ROUTE_TITLES[path] || {
+  const currentRoute = ROUTE_TITLES[path] || (path.startsWith('/admin/menu-management/') ? ROUTE_TITLES['/admin/menu-management'] : null) || {
     title: path.split('/').filter(Boolean).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' / ') || 'Hotel PMS',
     category: 'Operations'
   };

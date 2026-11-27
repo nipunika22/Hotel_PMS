@@ -1,6 +1,7 @@
 // backend/controllers/guestExpenseController.js
 const mongoose = require("mongoose");
 const GuestExpense = require("../models/GuestExpense");
+const Payment = require("../models/Payment");
 const Reservation = require("../models/Reservation");
 const { buildPropertyFilter, getActivePropertyId } = require("../middleware/propertyContext");
 const billingService = require("../services/billingService");
@@ -232,6 +233,10 @@ exports.updateExpense = async (req, res) => {
       return res.status(404).json({ error: "Expense not found" });
     }
 
+    if (await Payment.exists({ purpose: "restaurant_order", folioExpense: expense._id })) {
+      return res.status(409).json({ error: "Restaurant order folio charges are locked" });
+    }
+
     // Intercept transition to "Added to Bill"
     if (updates.paymentStatus === "Added to Bill" && expense.paymentStatus !== "Added to Bill") {
       const result = await billingService.addExpenseToBill({
@@ -339,6 +344,10 @@ exports.deleteExpense = async (req, res) => {
 
     if (!expense) {
       return res.status(404).json({ error: "Expense not found" });
+    }
+
+    if (await Payment.exists({ purpose: "restaurant_order", folioExpense: expense._id })) {
+      return res.status(409).json({ error: "Restaurant order folio charges are locked" });
     }
 
     // If billed to an invoice, remove line item and recalculate

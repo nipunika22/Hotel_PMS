@@ -51,11 +51,13 @@ import Events from './pages/Events';
 import Offers from './pages/Offers';
 import RestaurantDetail from './pages/RestaurantDetail';
 import AdminRestaurants from './pages/AdminRestaurants';
+import AdminMenuManagement from './pages/AdminMenuManagement';
 import DepartmentDiningOffers from './pages/DepartmentDiningOffers';
 import AdminEvents from './pages/AdminEvents';
 import NotificationCenter from './pages/NotificationCenter';
 import AdminNotifications from './pages/AdminNotifications';
 import SuperAdminPanel from './pages/SuperAdminPanel';
+import RestaurantOperations from "./pages/RestaurantOperations";
 import { RoomManagementDashboard, RestaurantManagementDashboard, EventManagementDashboard } from './pages/ManagementDashboards';
 import Attendance from './pages/Attendance';
 import { getLandingPath, normalizeRole, ROUTE_ROLES, STAFF_ROLES, SUPER_ADMIN_ROLE, hasDepartmentPermission } from './config/roleAccess';
@@ -468,6 +470,7 @@ function AppContent() {
 
         {/* Reservation Routes (Staff/Admin only) */}
         <Route path="/rooms/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.roomDashboard} requiredPermission="rooms"><RoomManagementDashboard /></StaffRoute>} />
+        <Route path="/admin/restaurants/operations/:restaurantId" element={<StaffRoute allowedRoles={ROUTE_ROLES.restaurantDashboard} requiredPermission="dining"><RestaurantOperations /></StaffRoute>} />
         <Route path="/admin/restaurants/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.restaurantDashboard} requiredPermission="dining"><RestaurantManagementDashboard /></StaffRoute>} />
         <Route path="/admin/events/dashboard" element={<StaffRoute allowedRoles={ROUTE_ROLES.eventDashboard} requiredPermission="events"><EventManagementDashboard /></StaffRoute>} />
         <Route
@@ -666,6 +669,7 @@ function AppContent() {
             </StaffRoute>
           }
         />
+        <Route path="/admin/menu-management/:restaurantId?" element={<StaffRoute allowedRoles={ROUTE_ROLES.restaurants} requiredPermission="dining"><AdminMenuManagement /></StaffRoute>} />
         <Route path="/admin/dining-offers" element={<StaffRoute allowedRoles={['super_admin', 'admin', 'manager', 'staff', 'finance']} requiredPermission={['dining', 'offers.dining']}><DepartmentDiningOffers /></StaffRoute>} />
         <Route
           path="/restaurant-management"

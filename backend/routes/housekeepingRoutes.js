@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   getTasks,
   getMyTasks,
+  syncTasks,
   createTask,
   assignTask,
   startTask,
@@ -22,6 +23,7 @@ const SUPERVISOR_ROLES = ["admin", "manager"];
 router.get("/", protect, authorize(...ALL_HOUSEKEEPING_ROLES), getTasks);
 router.get("/my", protect, authorize(...ALL_HOUSEKEEPING_ROLES), getMyTasks);
 router.get("/staff", protect, authorize(...SUPERVISOR_ROLES, "staff"), getStaff);
+router.post("/sync", authorize(...SUPERVISOR_ROLES), syncTasks);
 router.post("/", protect, authorize(...SUPERVISOR_ROLES, "staff"), createTask);
 router.put("/:id/assign", protect, authorize(...SUPERVISOR_ROLES, "staff"), assignTask);
 router.put("/:id/start", protect, authorize(...ALL_HOUSEKEEPING_ROLES), startTask);

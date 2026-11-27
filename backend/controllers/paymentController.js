@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const Booking = require("../models/Booking");
 const Reservation = require("../models/Reservation");
-const RestaurantReservation = require("../models/RestaurantReservation");
 const EventBooking = require("../models/EventBooking");
 const Invoice = require("../models/Invoice");
 const Property = require("../models/Property");
@@ -12,11 +11,34 @@ const { buildPropertyFilter, getActivePropertyId } = require("../middleware/prop
 const {
   getPayHereConfig,
   formatPayHereAmount,
-  generatePaymentHash,
+  buildPayHereCheckout,
   verifyNotificationSignature,
   mapPayHereStatusCode
 } = require("../services/payhereService");
 const paymentService = require("../services/paymentService");
+const { initiateReservationPayment, applyDiningCallback, recordDiningAmountMismatch, canReadReservation } = require("../services/diningPaymentService");
+
+function canReadRestaurantOrderPayments(req) {
+  return !!req.propertyId &&
+    ["admin", "manager", "staff", "finance", "super_admin"].includes(req.user?.role) &&
+    (req.user.role !== "admin" || !req.user.departmentAdmin ||
+      [...(req.user.adminDepartments || []), ...(req.user.adminPermissions || [])].includes("dining"));
+}
+
+function restaurantOrderPaymentFilter(req) {
+  const alternatives = [{ purpose: { $ne: "restaurant_order" } }];
+  if (canReadRestaurantOrderPayments(req)) {
+    alternatives.push({ purpose: "restaurant_order", property: req.propertyId });
+  }
+  return { $or: alternatives };
+}
+
+function canReadPayment(req, payment) {
+  if (!["restaurant_order", "restaurant_dining"].includes(payment.purpose)) return true;
+  if (!req.propertyId || String(payment.property?._id || payment.property) !== String(req.propertyId)) return false;
+  return canReadRestaurantOrderPayments(req) ||
+    (payment.purpose === "restaurant_dining" && canReadReservation(req.user, payment.restaurantReservation || {}));
+}
 
 /**
  * Helper: Find authoritative business record and calculate amount
@@ -43,23 +65,6 @@ const resolveBusinessEntity = async (purpose, targetId, sessionUser) => {
       amount = Number(record.totalPrice || 0);
       propertyId = record.property || record.room?.property;
       title = `Serendib Sanctuary Stay — Room ${record.room?.roomNumber || ""} (${record.room?.roomType || "Suite"})`;
-      break;
-    }
-
-    case "restaurant_dining": {
-      record = await RestaurantReservation.findById(targetId).populate("restaurant", "name property");
-      if (!record) throw new Error("Restaurant dining reservation not found");
-      if (sessionUser.role !== "admin" && sessionUser.role !== "staff" && sessionUser.role !== "finance" && record.user && record.user.toString() !== sessionUser.id) {
-        const err = new Error("Not authorized to pay for this dining reservation");
-        err.statusCode = 403;
-        throw err;
-      }
-        amount = record.reservationTotalPrice != null
-          ? Number(record.reservationTotalPrice)
-          : (record.totalAmount != null ? Number(record.totalAmount) : 0);
-        currency = record.reservationPriceCurrency || record.currency || "LKR";
-      propertyId = record.property || record.restaurant?.property;
-      title = `Dining at ${record.restaurant?.name || "Serendib Restaurant"} — Ref ${record.confirmationNumber}`;
       break;
     }
 
@@ -112,6 +117,19 @@ exports.initiatePayment = async (req, res) => {
   }
 
   try {
+    if (purpose === "restaurant_dining") {
+      const { reservation, payment } = await initiateReservationPayment({
+        targetId, property: req.propertyId, user: req.user, notes
+      });
+      const title = `Dining at ${reservation.restaurant?.name || "Restaurant"} · ${reservation.confirmationNumber}`;
+      const checkout = await buildPayHereCheckout(payment, req.user, title, purpose, targetId);
+      for (const key of ["return_url", "cancel_url"]) {
+        const url = new URL(checkout.payHereParams[key]);
+        url.searchParams.set("propertyId", String(payment.property));
+        checkout.payHereParams[key] = url.toString();
+      }
+      return res.json(checkout);
+    }
     const { record, amount: authoritativeAmount, currency, title, propertyId } = await resolveBusinessEntity(
       purpose,
       targetId,
@@ -134,7 +152,6 @@ exports.initiatePayment = async (req, res) => {
       paymentStatus: "pending"
     };
     if (purpose === "room_booking") query.booking = targetId;
-    if (purpose === "restaurant_dining") query.restaurantReservation = targetId;
     if (purpose === "event_booking") query.eventBooking = targetId;
     if (purpose === "invoice_settlement") query.invoice = targetId;
 
@@ -152,7 +169,6 @@ exports.initiatePayment = async (req, res) => {
         gateway: "PayHere",
         notes: notes || "",
         ...(purpose === "room_booking" && { booking: targetId, reservation: record.reservation?._id || record.reservation }),
-        ...(purpose === "restaurant_dining" && { restaurantReservation: targetId }),
         ...(purpose === "event_booking" && { eventBooking: targetId }),
         ...(purpose === "invoice_settlement" && { invoice: targetId }),
         auditLog: [
@@ -178,50 +194,7 @@ exports.initiatePayment = async (req, res) => {
       await payment.save();
     }
 
-    // Retrieve user contact details for checkout
-    const currentUser = await User.findById(req.user.id);
-    const firstName = currentUser?.name?.split(" ")[0] || "Valued";
-    const lastName = currentUser?.name?.split(" ").slice(1).join(" ") || "Guest";
-    const email = currentUser?.email || req.user.email || "";
-    const phone = currentUser?.phone || req.user.phone || "0770000000";
-    const address = currentUser?.address || "Serendib Guest Residence";
-
-    const config = getPayHereConfig();
-    const orderId = payment.paymentReference;
-    const hash = generatePaymentHash(orderId, payableAmount, currency);
-
-    // PayHere checkout payload
-    const payHereParams = {
-      sandbox: config.isSandbox,
-      merchant_id: config.merchantId,
-      return_url: `${config.frontendBaseUrl}/payment/success?ref=${orderId}`,
-      cancel_url: `${config.frontendBaseUrl}/payment/cancel?ref=${orderId}`,
-      notify_url: `${config.backendBaseUrl}/api/payments/payhere/notify`,
-      order_id: orderId,
-      items: title,
-      amount: formatPayHereAmount(payableAmount),
-      currency: currency.toUpperCase(),
-      hash: hash,
-      first_name: firstName,
-      last_name: lastName,
-      email: email,
-      phone: phone,
-      address: address,
-      city: "Colombo",
-      country: "Sri Lanka",
-      custom_1: purpose,
-      custom_2: String(targetId)
-    };
-
-    res.status(200).json({
-      success: true,
-      paymentId: payment._id,
-      paymentReference: payment.paymentReference,
-      amount: payableAmount,
-      currency,
-      checkoutUrl: config.checkoutUrl,
-      payHereParams
-    });
+    res.status(200).json(await buildPayHereCheckout(payment, req.user, title, purpose, targetId));
   } catch (err) {
     console.error("initiatePayment error:", err);
     res.status(err.statusCode || 500).json({ error: err.message || "Failed to initiate payment" });
@@ -272,6 +245,16 @@ exports.handlePayHereWebhook = async (req, res) => {
     if (!payment) {
       console.warn(`[PAYHERE] Payment reference not found: ${order_id}`);
       return res.status(404).send("Payment reference not found");
+    }
+
+    if (["restaurant_order", "restaurant_dining"].includes(payment.purpose)) {
+      if (formatPayHereAmount(payment.amount) !== formatPayHereAmount(payhere_amount) ||
+          payment.currency !== String(payhere_currency || "").toUpperCase()) {
+        await recordDiningAmountMismatch(payment);
+        return res.status(400).send("Amount or currency mismatch");
+      }
+      await applyDiningCallback(payment, { status_code, payment_id, method, status_message });
+      return res.status(200).send("OK");
     }
 
     // Amount & Currency verification against database
@@ -329,24 +312,6 @@ exports.handlePayHereWebhook = async (req, res) => {
             }
           }
         }
-      } else if (payment.purpose === "restaurant_dining" && payment.restaurantReservation) {
-        const dining = await RestaurantReservation.findById(payment.restaurantReservation);
-        if (dining) {
-          const confirmedPayments = await Payment.find({
-            restaurantReservation: dining._id,
-            paymentStatus: "completed"
-          }).select("amount");
-          const confirmedAmount = confirmedPayments.reduce((sum, confirmed) => sum + (Number(confirmed.amount) || 0), 0);
-          dining.status = "CONFIRMED";
-          dining.paymentStatus = "Paid";
-          dining.paidAmount = confirmedAmount;
-          const savedTotal = dining.reservationTotalPrice != null
-            ? Number(dining.reservationTotalPrice)
-            : (dining.totalAmount != null ? Number(dining.totalAmount) : null);
-          if (savedTotal != null && dining.paidAmount < savedTotal) dining.paymentStatus = "Partially Paid";
-          dining.notes = (dining.notes ? dining.notes + " | " : "") + `Paid online via PayHere (${payment.paymentReference})`;
-          await dining.save();
-        }
       } else if (payment.purpose === "event_booking" && payment.eventBooking) {
         const eventBooking = await EventBooking.findById(payment.eventBooking);
         if (eventBooking) {
@@ -394,7 +359,7 @@ exports.handlePayHereWebhook = async (req, res) => {
     return res.status(200).send("OK");
   } catch (err) {
     console.error("handlePayHereWebhook error:", err);
-    return res.status(500).send("Internal processing error");
+    return res.status(err.statusCode || 500).send(err.statusCode ? err.message : "Internal processing error");
   }
 };
 
@@ -417,7 +382,7 @@ exports.verifyPaymentStatus = async (req, res) => {
       .populate("eventBooking")
       .populate("invoice");
 
-    if (!payment) {
+    if (!payment || !canReadPayment(req, payment)) {
       return res.status(404).json({ error: "Payment record not found" });
     }
 
@@ -445,7 +410,7 @@ exports.verifyPaymentStatus = async (req, res) => {
  */
 exports.getMyPayments = async (req, res) => {
   try {
-    const payments = await Payment.find({ user: req.user.id })
+    const payments = await Payment.find({ user: req.user.id, ...restaurantOrderPaymentFilter(req) })
       .populate("property", "name city")
       .populate({
         path: "booking",
@@ -478,7 +443,7 @@ exports.getPayments = async (req, res) => {
       limit = 20
     } = req.query;
 
-    const filter = buildPropertyFilter(req, {});
+    const filter = buildPropertyFilter(req, { $and: [restaurantOrderPaymentFilter(req)] });
 
     if (status && status !== "ALL") {
       filter.paymentStatus = status.toLowerCase();
@@ -563,7 +528,7 @@ exports.getPayment = async (req, res) => {
       .populate("invoice")
       .populate("refundedBy", "name email");
 
-    if (!payment) {
+    if (!payment || !canReadPayment(req, payment)) {
       return res.status(404).json({ error: "Payment not found" });
     }
 
@@ -589,7 +554,7 @@ exports.getFinancialAnalytics = async (req, res) => {
   try {
     const { startDate, endDate, propertyId } = req.query;
 
-    const baseFilter = buildPropertyFilter(req, {});
+    const baseFilter = buildPropertyFilter(req, restaurantOrderPaymentFilter(req));
     if (propertyId && propertyId !== "ALL") {
       baseFilter.property = new mongoose.Types.ObjectId(propertyId);
     }
@@ -813,6 +778,10 @@ exports.processRefund = async (req, res) => {
     if (!payment) {
       return res.status(404).json({ error: "Payment not found" });
     }
+    if (payment.purpose === "restaurant_order") {
+      return res.status(409).json({ error: "Restaurant order settlements require their dedicated workflow" });
+    }
+
 
     if (payment.paymentStatus !== "completed" && payment.paymentStatus !== "partially_refunded") {
       return res.status(400).json({ error: "Only completed payments can be refunded" });
@@ -884,6 +853,10 @@ exports.simulateSandboxPayment = async (req, res) => {
     if (!payment) {
       return res.status(404).json({ error: "Payment not found" });
     }
+    if (["restaurant_order", "restaurant_dining"].includes(payment.purpose)) {
+      return res.status(409).json({ error: "Restaurant order settlements require their dedicated workflow" });
+    }
+
 
     // Generate real signature as PayHere server would
     const crypto = require("crypto");
@@ -1013,7 +986,11 @@ exports.updatePayment = async (req, res) => {
   const updates = req.body;
 
   try {
-    const payment = await Payment.findByIdAndUpdate(id, updates, {
+    if (["purpose", "restaurantOrder", "previousRestaurantOrder", "restaurant", "folioExpense", "reconciliationRequired", "reconciliationReason"].some(key => Object.hasOwn(updates, key)) ||
+        Object.keys(updates).some(key => key.startsWith("$"))) {
+      return res.status(400).json({ error: "Payment relationship fields cannot be updated" });
+    }
+    const payment = await Payment.findOneAndUpdate({ _id: id, purpose: { $nin: ["restaurant_order", "restaurant_dining"] } }, updates, {
       new: true,
       runValidators: true
     })
@@ -1045,6 +1022,10 @@ exports.deletePayment = async (req, res) => {
     if (!payment) {
       return res.status(404).json({ error: "Payment not found" });
     }
+    if (["restaurant_order", "restaurant_dining"].includes(payment.purpose)) {
+      return res.status(409).json({ error: "Restaurant order settlements require their dedicated workflow" });
+    }
+
 
     if (payment.booking) {
       const booking = await Booking.findById(payment.booking);
@@ -1078,6 +1059,7 @@ exports.getPaymentsByDate = async (req, res) => {
     end.setHours(23, 59, 59, 999);
 
     const filter = buildPropertyFilter(req, {
+      ...restaurantOrderPaymentFilter(req),
       paymentDate: { $gte: start, $lte: end }
     });
 

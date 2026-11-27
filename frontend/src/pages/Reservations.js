@@ -58,7 +58,7 @@ const Reservations = () => {
       const response = await reservationAPI.checkOut(id, { actualCheckOutDate: new Date() });
       
       if (response.data.invoice) {
-        toast.success('Invoice generated. Please process payment.');
+        toast.success('Guest checked out successfully.');
         navigate(`/invoices/${response.data.invoice._id}`);
       } else {
         toast.success('Guest checked out successfully');

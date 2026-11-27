@@ -37,7 +37,7 @@ const paymentSchema = new mongoose.Schema({
   },
   purpose: {
     type: String,
-    enum: ["room_booking", "restaurant_dining", "event_booking", "invoice_settlement", "custom"],
+    enum: ["room_booking", "restaurant_dining", "restaurant_order", "event_booking", "invoice_settlement", "custom"],
     default: "room_booking",
     index: true
   },
@@ -56,6 +56,12 @@ const paymentSchema = new mongoose.Schema({
     ref: "RestaurantReservation",
     index: true
   },
+  previousRestaurantOrder: { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantOrder", index: true, sparse: true },
+  reconciliationRequired: { type: Boolean, default: false },
+  reconciliationReason: String,
+  restaurantOrder: { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantOrder" },
+  restaurant: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
+  folioExpense: { type: mongoose.Schema.Types.ObjectId, ref: "GuestExpense", index: true, sparse: true },
   eventBooking: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "EventBooking",
@@ -84,7 +90,7 @@ const paymentSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ["Cash", "Card", "Online", "PayHere", "Bank Transfer"],
+    enum: ["Cash", "Card", "Online", "PayHere", "Bank Transfer", "Room Folio"],
     default: "Online"
   },
   paymentStatus: {
@@ -92,6 +98,7 @@ const paymentSchema = new mongoose.Schema({
     enum: [
       "pending",
       "processing",
+      "posted_to_folio",
       "completed",
       "failed",
       "cancelled",
@@ -197,5 +204,12 @@ paymentSchema.pre("validate", function(next) {
 paymentSchema.index({ property: 1, paymentStatus: 1, paymentDate: -1 });
 paymentSchema.index({ property: 1, purpose: 1, paymentStatus: 1 });
 paymentSchema.index({ user: 1, paymentDate: -1 });
+
+paymentSchema.index({ restaurantOrder: 1 }, { unique: true, sparse: true });
+paymentSchema.index({ property: 1, restaurant: 1, purpose: 1, paymentDate: -1 });
+paymentSchema.index({ property: 1, transactionId: 1 }, {
+  unique: true,
+  partialFilterExpression: { purpose: "restaurant_order", paymentMethod: "Card", transactionId: { $type: "string" } }
+});
 
 module.exports = mongoose.model("Payment", paymentSchema);

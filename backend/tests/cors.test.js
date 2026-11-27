@@ -39,14 +39,32 @@ describe("API CORS configuration", () => {
         headers: {
           Origin: origin,
           "Access-Control-Request-Method": "GET",
-          "Access-Control-Request-Headers": "authorization,content-type,x-property-id"
+          "Access-Control-Request-Headers": "authorization,content-type,x-property-id,x-dining-guest-token"
         }
       });
 
       assert.equal(response.status, 204);
       assert.equal(response.headers.get("access-control-allow-origin"), origin);
       assert.equal(response.headers.get("access-control-allow-credentials"), "true");
-      assert.match(response.headers.get("access-control-allow-headers"), /authorization/i);
+      const allowedHeaders = response.headers.get("access-control-allow-headers")
+        .toLowerCase().split(/,\s*/);
+      for (const header of ["authorization", "content-type", "x-property-id", "x-dining-guest-token"]) {
+        assert.ok(allowedHeaders.includes(header));
+      }
+    });
+  }
+
+  for (const path of [
+    "/api/restaurants",
+    "/api/properties/current",
+    "/api/rooms/available?checkInDate=2026-11-26&checkOutDate=2026-11-28"
+  ]) {
+    it(`keeps CORS headers on database readiness errors for ${path}`, async () => {
+      const origin = "http://localhost:3000";
+      const response = await fetch(`${baseUrl}${path}`, { headers: { Origin: origin } });
+
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get("access-control-allow-origin"), origin);
     });
   }
 

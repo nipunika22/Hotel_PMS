@@ -4,23 +4,59 @@ const Restaurant = require("../models/Restaurant");
 const RestaurantTable = require("../models/RestaurantTable");
 const RestaurantMenuCategory = require("../models/RestaurantMenuCategory");
 const RestaurantMenuItem = require("../models/RestaurantMenuItem");
+const RestaurantOrder = require("../models/RestaurantOrder");
 const RestaurantBuffet = require("../models/RestaurantBuffet");
 const RestaurantOffer = require("../models/RestaurantOffer");
 const RestaurantReservation = require("../models/RestaurantReservation");
 const Reservation = require("../models/Reservation");
 const GuestExpense = require("../models/GuestExpense");
-const User = require("../models/User");
+const Invoice = require("../models/Invoice");
 const Payment = require("../models/Payment");
+const { findVerifiedStay, matchesContact, hashGuestToken, createGuestToken, verifyGuestToken } = require("../services/diningGuestVerification");
+const { reservationPaymentQuery, summarizeReservationPayment, getReservationPaymentsById, canReadReservation } = require("../services/diningPaymentService");
 const { isGuestCountWithinCapacity, resolveReservationPricing } = require("../utils/diningPricing");
+const { seatReservation, completeReservation } = require("../services/diningSeatingService");
 
+const RESERVATION_TRANSITIONS = {
+  PENDING: ["CONFIRMED", "CANCELLED", "NO_SHOW"],
+  CONFIRMED: ["SEATED", "COMPLETED", "CANCELLED", "NO_SHOW"],
+  SEATED: ["COMPLETED"],
+  COMPLETED: [],
+  CANCELLED: [],
+  NO_SHOW: []
+};
 
-// Helper to check time overlap (assuming 90 minute dining window)
-function isTimeConflicting(time1, time2, windowMinutes = 90) {
-  const [h1, m1] = time1.split(":").map(Number);
-  const [h2, m2] = time2.split(":").map(Number);
-  const min1 = h1 * 60 + m1;
-  const min2 = h2 * 60 + m2;
-  return Math.abs(min1 - min2) < windowMinutes;
+function parseDiningDateTime(date, time) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || "")) || !/^\d{2}:\d{2}$/.test(String(time || ""))) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+  if (hours > 23 || minutes > 59) return null;
+  const timestamp = Date.UTC(year, month - 1, day, hours, minutes);
+  return new Date(timestamp).toISOString().slice(0, 10) === date ? timestamp : null;
+}
+
+function isTimeConflicting(date1, time1, date2, time2, windowMinutes = 90) {
+  const start1 = parseDiningDateTime(date1, time1);
+  const start2 = parseDiningDateTime(date2, time2);
+  return start1 !== null && start2 !== null && Math.abs(start1 - start2) < windowMinutes * 60_000;
+}
+
+function shiftDiningDate(date, days) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function validReservationTransition(current, next) {
+  return current === next || RESERVATION_TRANSITIONS[current]?.includes(next);
+}
+
+function validateTagline(body) {
+  return body?.tagline === undefined ||
+    (typeof body.tagline === "string" && body.tagline.trim().length <= 160);
+}
+
+function currentCapacityAllows(restaurant, bookedCovers, requestedCovers) {
+  return bookedCovers + requestedCovers <= Number(restaurant.capacity || 80) * 1.2;
 }
 
 function getReservationEndTime(startTime) {
@@ -219,7 +255,7 @@ exports.getRestaurantMenu = async (req, res) => {
       ? { _id: id, property: propertyId }
       : { slug: id, property: propertyId };
 
-    const restaurant = await Restaurant.findOne(query);
+    const restaurant = await Restaurant.findOne({ ...query, active: true });
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
@@ -269,7 +305,7 @@ exports.getRestaurantBuffets = async (req, res) => {
       ? { _id: id, property: propertyId }
       : { slug: id, property: propertyId };
 
-    const restaurant = await Restaurant.findOne(query);
+    const restaurant = await Restaurant.findOne({ ...query, active: true });
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
@@ -304,7 +340,7 @@ exports.getRestaurantOffers = async (req, res) => {
       ? { _id: id, property: propertyId }
       : { slug: id, property: propertyId };
 
-    const restaurant = await Restaurant.findOne(query);
+    const restaurant = await Restaurant.findOne({ ...query, active: true });
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
@@ -339,6 +375,9 @@ exports.checkAvailability = async (req, res) => {
     if (!date || !time) {
       return res.status(400).json({ error: "Date and time parameters are required" });
     }
+    if (parseDiningDateTime(date, time) === null) {
+      return res.status(400).json({ error: "Enter a valid date and time" });
+    }
 
     const guests = Number(guestCount);
     if (!Number.isSafeInteger(guests) || guests < 1) {
@@ -349,7 +388,7 @@ exports.checkAvailability = async (req, res) => {
       ? { _id: id, property: propertyId }
       : { slug: id, property: propertyId };
 
-    const restaurant = await Restaurant.findOne(query);
+    const restaurant = await Restaurant.findOne({ ...query, active: true });
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
@@ -362,7 +401,7 @@ exports.checkAvailability = async (req, res) => {
       restaurant: restaurant._id,
       active: true,
       capacity: { $gte: guests },
-      status: { $ne: "OUT_OF_SERVICE" }
+      status: { $in: ["AVAILABLE", "RESERVED"] }
     };
 
     if (seatingPreference && seatingPreference !== "Any") {
@@ -375,7 +414,7 @@ exports.checkAvailability = async (req, res) => {
     const existingReservations = await RestaurantReservation.find({
       property: propertyId,
       restaurant: restaurant._id,
-      date,
+      date: { $gte: shiftDiningDate(date, -1), $lte: shiftDiningDate(date, 1) },
       status: { $in: ["PENDING", "CONFIRMED", "SEATED"] }
     }).lean();
 
@@ -384,18 +423,18 @@ exports.checkAvailability = async (req, res) => {
       const tableReservations = existingReservations.filter(
         (r) => r.table && r.table.toString() === table._id.toString()
       );
-      const hasConflict = tableReservations.some((r) => isTimeConflicting(r.time, time, 90));
+      const hasConflict = tableReservations.some((r) => isTimeConflicting(r.date, r.time, date, time, 90));
       return !hasConflict;
     });
 
     // Also calculate overall restaurant capacity covers booked
     const totalBookedCovers = existingReservations
-      .filter((r) => isTimeConflicting(r.time, time, 90))
+      .filter((r) => isTimeConflicting(r.date, r.time, date, time, 90))
       .reduce((sum, r) => sum + (r.guestCount || 0), 0);
 
     const partySizeSupported = guests <= maxPartySize;
-    const isAvailable = partySizeSupported && (availableTables.length > 0 || (restaurant.capacity - totalBookedCovers >= guests));
-
+    const isAvailable = partySizeSupported && availableTables.length > 0 &&
+      currentCapacityAllows(restaurant, totalBookedCovers, guests);
     return res.status(200).json({
       success: true,
       available: isAvailable,
@@ -403,7 +442,8 @@ exports.checkAvailability = async (req, res) => {
       partySizeSupported,
       availableTablesCount: availableTables.length,
       estimatedCoversRemaining: Math.max(0, restaurant.capacity - totalBookedCovers),
-      suggestedTableId: availableTables.length > 0 ? availableTables[0]._id : null
+      suggestedTableId: availableTables.length > 0 ? availableTables[0]._id : null,
+      availableTables: availableTables.map(({ _id, tableNumber, capacity, location }) => ({ _id, tableNumber, capacity, location }))
     });
   } catch (err) {
     console.error("checkAvailability error:", err);
@@ -420,55 +460,17 @@ exports.lookupHotelStay = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { reservationNumber, email, phone, roomNumber } = req.body;
-
-    if (!reservationNumber && !email && !roomNumber) {
-      return res.status(400).json({ error: "Reservation number, room number, or email required" });
+    if (typeof reservationNumber !== "string" || !reservationNumber.trim() ||
+        typeof email !== "string" || !email.trim() || typeof phone !== "string" || !phone.trim()) {
+      return res.status(400).json({ error: "Hotel reservation number, email and phone are required" });
     }
+    const stay = await findVerifiedStay(propertyId, { reservationNumber: reservationNumber.trim().toUpperCase() },
+      { email, phone, roomNumber });
+    if (!stay) return res.status(404).json({ error: "Hotel stay could not be verified" });
 
-    const query = { property: propertyId, status: { $in: ["Confirmed", "Checked-In"] } };
-
-    if (reservationNumber) {
-      query.reservationNumber = reservationNumber.trim();
-    }
-
-    let hotelRes = await Reservation.findOne(query)
-      .populate("guest", "name email phone")
-      .populate("room", "roomNumber roomType")
-      .lean();
-
-    // If query by roomNumber or email
-    if (!hotelRes && (roomNumber || email)) {
-      const fallbackQuery = { property: propertyId, status: { $in: ["Confirmed", "Checked-In"] } };
-      const matchingResList = await Reservation.find(fallbackQuery)
-        .populate("guest", "name email phone")
-        .populate("room", "roomNumber roomType")
-        .lean();
-
-      hotelRes = matchingResList.find((r) => {
-        const matchesRoom = roomNumber && r.room && r.room.roomNumber.toString() === roomNumber.toString();
-        const matchesEmail = email && r.guest && r.guest.email.toLowerCase() === email.toLowerCase();
-        return matchesRoom || matchesEmail;
-      });
-    }
-
-    if (!hotelRes) {
-      return res.status(404).json({ error: "No active hotel reservation found with the provided details" });
-    }
-
-    return res.status(200).json({
+    return res.json({
       success: true,
-      data: {
-        reservationId: hotelRes._id,
-        reservationNumber: hotelRes.reservationNumber,
-        guestName: hotelRes.guest?.name || "Hotel Guest",
-        email: hotelRes.guest?.email || "",
-        phone: hotelRes.guest?.phone || "",
-        roomNumber: hotelRes.room?.roomNumber || "Suite",
-        roomType: hotelRes.roomType,
-        checkInDate: hotelRes.checkInDate,
-        checkOutDate: hotelRes.checkOutDate,
-        status: hotelRes.status
-      }
+      data: { reservationId: stay._id, reservationNumber: stay.reservationNumber, roomNumber: stay.room?.roomNumber || "" }
     });
   } catch (err) {
     console.error("lookupHotelStay error:", err);
@@ -496,6 +498,7 @@ exports.createReservation = async (req, res) => {
       time,
       guestCount,
       seatingPreference = "Any",
+      tableId,
       diningType = "À la carte",
       buffetSessionId,
       offerId,
@@ -506,6 +509,12 @@ exports.createReservation = async (req, res) => {
     // 1. Validation
     if (!customerName || !email || !phone || !date || !time) {
       return res.status(400).json({ error: "Customer name, email, phone, date, and time are required" });
+    }
+    if (parseDiningDateTime(date, time) === null) {
+      return res.status(400).json({ error: "Enter a valid date and time" });
+    }
+    if (tableId !== undefined && !mongoose.isObjectIdOrHexString(tableId)) {
+      return res.status(400).json({ error: "Select a valid table" });
     }
 
     const guests = Number(guestCount);
@@ -518,13 +527,9 @@ exports.createReservation = async (req, res) => {
       ? { _id: id, property: propertyId }
       : { slug: id, property: propertyId };
 
-    const restaurant = await Restaurant.findOne(restQuery);
+    const restaurant = await Restaurant.findOne({ ...restQuery, active: true });
     if (!restaurant) {
       return res.status(404).json({ error: "Restaurant not found in this property" });
-    }
-
-    if (!restaurant.active) {
-      return res.status(400).json({ error: "Restaurant is currently not accepting reservations" });
     }
 
     const maxPartySize = await getMaxPartySize(propertyId, restaurant);
@@ -558,111 +563,26 @@ exports.createReservation = async (req, res) => {
     });
     const { pricePerGuest, fixedPrice, pricingType, pricingSource, totalPrice: reservationTotalPrice, currency: reservationPriceCurrency } = pricing;
 
-    // 2. Validate table capacity / double booking
-    const tableQuery = {
-      property: propertyId,
-      restaurant: restaurant._id,
-      active: true,
-      capacity: { $gte: guests },
-      status: { $ne: "OUT_OF_SERVICE" }
-    };
-
-    if (seatingPreference && seatingPreference !== "Any") {
-      tableQuery.location = seatingPreference;
-    }
-
-    const candidateTables = await RestaurantTable.find(tableQuery).sort({ capacity: 1 });
-
-    // Existing active reservations at the same date
-    const existingReservations = await RestaurantReservation.find({
-      property: propertyId,
-      restaurant: restaurant._id,
-      date,
-      status: { $in: ["PENDING", "CONFIRMED", "SEATED"] }
-    });
-
-    // Check overall restaurant capacity
-    const currentCovers = existingReservations
-      .filter((r) => isTimeConflicting(r.time, time, 90))
-      .reduce((sum, r) => sum + r.guestCount, 0);
-
-    if (currentCovers + guests > restaurant.capacity * 1.2) {
-      return res.status(400).json({
-        error: "Restaurant is fully booked for the selected date and time window. Please choose another time."
-      });
-    }
-
-    // Find first available unconflicted table
-    let assignedTable = null;
-    for (const table of candidateTables) {
-      const tableBookings = existingReservations.filter(
-        (r) => r.table && r.table.toString() === table._id.toString()
-      );
-      const conflict = tableBookings.some((r) => isTimeConflicting(r.time, time, 90));
-      if (!conflict) {
-        assignedTable = table;
-        break;
-      }
-    }
-
-    // If no exact preference matched, try any location
-    if (!assignedTable && seatingPreference !== "Any") {
-      const anyCandidateTables = await RestaurantTable.find({
-        property: propertyId,
-        restaurant: restaurant._id,
-        active: true,
-        capacity: { $gte: guests },
-        status: { $ne: "OUT_OF_SERVICE" }
-      }).sort({ capacity: 1 });
-
-      for (const table of anyCandidateTables) {
-        const tableBookings = existingReservations.filter(
-          (r) => r.table && r.table.toString() === table._id.toString()
-        );
-        const conflict = tableBookings.some((r) => isTimeConflicting(r.time, time, 90));
-        if (!conflict) {
-          assignedTable = table;
-          break;
-        }
-      }
-    }
-
-    // 3. Hotel guest linking
+    // Re-verify the stay when linking it. A successful lookup or a stay ID is not sufficient on its own.
     let linkedHotelRes = null;
-    let resolvedRoomNumber = roomNumber || "";
-    if (guestType === "Hotel Guest" && hotelReservationId) {
-      if (mongoose.Types.ObjectId.isValid(hotelReservationId)) {
-        linkedHotelRes = await Reservation.findOne({
-          _id: hotelReservationId,
-          property: propertyId
-        }).populate("room");
-        if (linkedHotelRes && linkedHotelRes.room) {
-          resolvedRoomNumber = linkedHotelRes.room.roomNumber || resolvedRoomNumber;
-        }
+    if (guestType === "Hotel Guest") {
+      if (typeof hotelReservationId !== "string" || !mongoose.isObjectIdOrHexString(hotelReservationId)) {
+        return res.status(400).json({ error: "Verify your hotel stay before linking the reservation" });
       }
+      linkedHotelRes = await findVerifiedStay(propertyId, { _id: hotelReservationId }, { email, phone, roomNumber });
+      if (!linkedHotelRes) return res.status(404).json({ error: "Hotel stay could not be verified" });
     }
-
-    // 4. Create reservation record
-    let resolvedUser = req.user ? req.user._id : undefined;
-    if (!resolvedUser && email) {
-      try {
-        const foundUser = await User.findOne({ email: email.trim().toLowerCase() });
-        if (foundUser) {
-          resolvedUser = foundUser._id;
-        }
-      } catch (e) {
-        // silent fallback
-      }
-    }
+    const resolvedRoomNumber = linkedHotelRes?.room?.roomNumber || "";
+    const guestManagementToken = req.user ? undefined : createGuestToken();
 
     const reservationData = {
       property: propertyId,
       restaurant: restaurant._id,
-      table: assignedTable ? assignedTable._id : undefined,
       guestType,
       hotelReservation: linkedHotelRes ? linkedHotelRes._id : undefined,
       roomNumber: resolvedRoomNumber,
-      user: resolvedUser,
+      user: req.user?._id,
+      guestManagementTokenHash: guestManagementToken ? hashGuestToken(guestManagementToken) : undefined,
       customerName: customerName.trim(),
       email: email.trim().toLowerCase(),
 
@@ -697,7 +617,61 @@ exports.createReservation = async (req, res) => {
       status: "CONFIRMED"
     };
 
-    const reservation = await RestaurantReservation.create(reservationData);
+    const reservation = await mongoose.connection.transaction(async session => {
+      const currentRestaurant = await Restaurant.findOneAndUpdate(
+        { _id: restaurant._id, property: propertyId, active: true },
+        { $inc: { reservationAllocationVersion: 1 } },
+        { new: true, session }
+      );
+      if (!currentRestaurant) {
+        throw Object.assign(new Error("Restaurant is no longer accepting reservations"), { statusCode: 404 });
+      }
+
+      const candidateTables = await RestaurantTable.find({
+        property: propertyId,
+        restaurant: restaurant._id,
+        active: true,
+        capacity: { $gte: guests },
+        status: { $in: ["AVAILABLE", "RESERVED"] }
+      }).sort({ capacity: 1 }).session(session);
+      if (!candidateTables.length) {
+        throw Object.assign(new Error("No table is available for this party size"), { statusCode: 409 });
+      }
+
+      const existingReservations = await RestaurantReservation.find({
+        property: propertyId,
+        restaurant: restaurant._id,
+        date: { $gte: shiftDiningDate(date, -1), $lte: shiftDiningDate(date, 1) },
+        status: { $in: ["PENDING", "CONFIRMED", "SEATED"] }
+      }).session(session);
+      const currentCovers = existingReservations
+        .filter(row => isTimeConflicting(row.date, row.time, date, time, 90))
+        .reduce((sum, row) => sum + row.guestCount, 0);
+      if (!currentCapacityAllows(currentRestaurant, currentCovers, guests)) {
+        throw Object.assign(new Error("Restaurant is fully booked for the selected date and time window. Please choose another time."), { statusCode: 409 });
+      }
+
+      const hasNoConflict = table => !existingReservations.some(row =>
+        row.table && String(row.table) === String(table._id) &&
+        isTimeConflicting(row.date, row.time, date, time, 90)
+      );
+      const preferredTable = seatingPreference && seatingPreference !== "Any"
+        ? candidateTables.find(table => table.location === seatingPreference && hasNoConflict(table))
+        : null;
+      const selectedTable = tableId ? candidateTables.find(table => String(table._id) === String(tableId)) : null;
+      if (tableId && (!selectedTable || !hasNoConflict(selectedTable) ||
+          (seatingPreference && seatingPreference !== "Any" && selectedTable.location !== seatingPreference))) {
+        throw Object.assign(new Error("The selected table is no longer available. Please choose another table."), { statusCode: 409 });
+      }
+      const assignedTable = selectedTable || preferredTable || candidateTables.find(hasNoConflict);
+      if (!assignedTable) {
+        throw Object.assign(new Error("No table is available for the selected date and time. Please choose another time."), { statusCode: 409 });
+      }
+
+      const reservation = new RestaurantReservation({ ...reservationData, table: assignedTable._id });
+      await reservation.save({ session });
+      return reservation;
+    });
 
     const populatedReservation = await RestaurantReservation.findById(reservation._id)
       .populate("restaurant", "name slug location openingHours contactPhone")
@@ -708,42 +682,51 @@ exports.createReservation = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Table reservation confirmed successfully",
+      guestManagementToken,
       data: populatedReservation
     });
   } catch (err) {
-    console.error("createReservation error:", err);
-    return res.status(500).json({ error: err.message || "Failed to create reservation" });
+    if (!err.statusCode && err.code !== 112) console.error("createReservation error:", err);
+    const statusCode = err.statusCode || (err.code === 112 ? 409 : 500);
+    return res.status(statusCode).json({
+      error: err.statusCode ? err.message : err.code === 112
+        ? "Reservation allocation changed. Please retry."
+        : "Failed to create reservation"
+    });
   }
 };
 
 /**
  * @desc Get reservation by confirmation reference
  * @route GET /api/restaurants/reservations/:ref
- * @access Public
+ * @access Authenticated owner or verified guest
  */
 exports.getReservationByRef = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { ref } = req.params;
 
+    const token = req.get("X-Dining-Guest-Token");
+    if (!req.user && !token) return res.status(401).json({ error: "Reservation verification required" });
+    if (!propertyId) return res.status(404).json({ error: "Reservation not found in this property" });
     const reservation = await RestaurantReservation.findOne({
       property: propertyId,
       $or: [{ confirmationNumber: ref.toUpperCase() }, { _id: mongoose.Types.ObjectId.isValid(ref) ? ref : null }]
-    })
+    }).select("+guestManagementTokenHash")
       .populate("restaurant", "name slug cuisine location contactPhone contactEmail heroImage")
       .populate("table", "tableNumber capacity location")
       .populate("buffetSession")
       .populate("offer")
       .populate("hotelReservation", "reservationNumber checkInDate checkOutDate");
 
-    if (!reservation) {
+    const guestVerified = reservation && !reservation.user && verifyGuestToken(token, reservation.guestManagementTokenHash);
+    if (!reservation || (!canReadReservation(req.user, reservation) && !guestVerified)) {
       return res.status(404).json({ error: "Reservation not found in this property" });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: reservation
-    });
+    const data = reservation.toObject();
+    delete data.guestManagementTokenHash;
+    return res.set("Cache-Control", "no-store").json({ success: true, data });
   } catch (err) {
     console.error("getReservationByRef error:", err);
     return res.status(500).json({ error: "Failed to fetch reservation" });
@@ -761,25 +744,21 @@ exports.getMyReservations = async (req, res) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const email = req.user.email ? req.user.email.toLowerCase().trim() : "";
-    const filter = {
-      $or: [
-        { user: req.user._id },
-        ...(email ? [{ email }] : [])
-      ]
-    };
-
-    const reservations = await RestaurantReservation.find(filter)
+    const reservations = await RestaurantReservation.find({ user: req.user._id })
       .populate("restaurant", "name slug location contactPhone contactEmail heroImage cuisine openingHours")
       .populate("table", "tableNumber capacity location")
       .populate("buffetSession", "name theme startTime endTime adultPrice")
       .populate("offer", "title price discount")
       .populate("hotelReservation", "reservationNumber checkInDate checkOutDate")
-      .sort({ date: -1, time: -1, createdAt: -1 });
+      .sort({ date: -1, time: -1, createdAt: -1 }).lean();
+    const paymentsByReservation = await getReservationPaymentsById(reservations);
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      data: reservations
+      data: reservations.map(reservation => ({
+        ...reservation,
+        ...summarizeReservationPayment(reservation, paymentsByReservation.get(String(reservation._id)) || [])
+      }))
     });
   } catch (err) {
     console.error("getMyReservations error:", err);
@@ -790,53 +769,34 @@ exports.getMyReservations = async (req, res) => {
 /**
  * @desc Cancel reservation
  * @route PUT /api/restaurants/reservations/:ref/cancel
- * @access Public / Private
+ * @access Authenticated owner or verified guest
  */
 exports.cancelReservation = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { ref } = req.params;
-    const { reason = "Cancelled by guest" } = req.body;
-
-    const query = {
-      $or: [
-        { confirmationNumber: ref.toUpperCase() },
-        { _id: mongoose.Types.ObjectId.isValid(ref) ? ref : null }
-      ]
-    };
-    if (propertyId) {
-      query.property = propertyId;
-    }
-
-    let reservation = await RestaurantReservation.findOne(query);
-
-    // If not found with property scope, fallback to global lookup by confirmation number
-    if (!reservation) {
-      reservation = await RestaurantReservation.findOne({
-        $or: [
-          { confirmationNumber: ref.toUpperCase() },
-          { _id: mongoose.Types.ObjectId.isValid(ref) ? ref : null }
-        ]
-      });
-    }
-
-    if (!reservation) {
+    const { reason = "Cancelled by guest", guestToken, email, phone } = req.body || {};
+    if (!propertyId) return res.status(404).json({ error: "Reservation not found" });
+    const reservation = await RestaurantReservation.findOne({
+      property: propertyId,
+      $or: [{ confirmationNumber: ref.toUpperCase() }, { _id: mongoose.isObjectIdOrHexString(ref) ? ref : null }]
+    }).select("+guestManagementTokenHash");
+    const guestVerified = reservation && !reservation.user &&
+      (reservation.guestManagementTokenHash
+        ? verifyGuestToken(guestToken, reservation.guestManagementTokenHash)
+        : matchesContact(reservation, { email, phone }));
+    if (!reservation || (!canReadReservation(req.user, reservation) && !guestVerified)) {
       return res.status(404).json({ error: "Reservation not found" });
     }
-
-    if (reservation.status === "CANCELLED") {
-      return res.status(400).json({ error: "Reservation is already cancelled" });
+    if (typeof reason !== "string" || reason.length > 500) {
+      return res.status(400).json({ error: "Invalid cancellation reason" });
     }
-
-    reservation.status = "CANCELLED";
-    reservation.cancellationReason = reason;
-    await reservation.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Reservation successfully cancelled",
-      data: reservation
-    });
+    const updated = await RestaurantReservation.findOneAndUpdate({
+      _id: reservation._id, property: propertyId, status: { $in: ["PENDING", "CONFIRMED"] },
+      arrivalStatus: { $ne: "ARRIVED" }
+    }, { $set: { status: "CANCELLED", cancellationReason: reason } }, { new: true, runValidators: true });
+    if (!updated) return res.status(409).json({ error: "This reservation cannot be cancelled" });
+    return res.json({ success: true, message: "Reservation successfully cancelled", data: updated });
   } catch (err) {
     console.error("cancelReservation error:", err);
     return res.status(500).json({ error: "Failed to cancel reservation" });
@@ -929,11 +889,22 @@ exports.getAdminDashboardStats = async (req, res) => {
 exports.getAdminRestaurants = async (req, res) => {
   try {
     const propertyId = req.propertyId;
-    const restaurants = await Restaurant.find({ property: propertyId }).sort({ sortOrder: 1, createdAt: -1 });
+    if (!propertyId) return res.status(400).json({ error: "Property context required" });
+    const restaurants = await Restaurant.find({ property: propertyId }).sort({ sortOrder: 1, createdAt: -1 }).lean();
+    const itemCounts = await RestaurantMenuItem.aggregate([
+      { $match: { property: propertyId, restaurant: { $in: restaurants.map((row) => row._id) } } },
+      { $group: { _id: "$restaurant", total: { $sum: 1 }, active: { $sum: { $cond: ["$available", 1, 0] } } } }
+    ]);
+    const countsByRestaurant = new Map(itemCounts.map((row) => [String(row._id), row]));
+    const rows = restaurants.map((restaurant) => {
+      const count = countsByRestaurant.get(String(restaurant._id));
+      return { ...restaurant, menuItemCount: count?.total || 0, activeMenuItemCount: count?.active || 0,
+        inactiveMenuItemCount: (count?.total || 0) - (count?.active || 0) };
+    });
 
     return res.status(200).json({
       success: true,
-      data: restaurants
+      data: rows
     });
   } catch (err) {
     console.error("getAdminRestaurants error:", err);
@@ -949,7 +920,8 @@ exports.getAdminRestaurants = async (req, res) => {
 exports.createRestaurant = async (req, res) => {
   try {
     const propertyId = req.propertyId;
-    const allowedFields = ["name", "slug", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
+    if (!validateTagline(req.body)) return res.status(400).json({ error: "Tagline must be a string of at most 160 characters" });
+    const allowedFields = ["name", "slug", "tagline", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
     const data = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowedFields.includes(key)));
     data.property = propertyId;
 
@@ -979,7 +951,8 @@ exports.updateRestaurant = async (req, res) => {
     const propertyId = req.propertyId;
     const { id } = req.params;
 
-    const allowedFields = ["name", "slug", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
+    if (!validateTagline(req.body)) return res.status(400).json({ error: "Tagline must be a string of at most 160 characters" });
+    const allowedFields = ["name", "slug", "tagline", "description", "cuisine", "restaurantType", "location", "openingHours", "contactPhone", "contactEmail", "heroImage", "images", "capacity", "reservationPricePerGuest", "reservationPriceCurrency", "active"];
     const updates = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowedFields.includes(key)));
     const restaurant = await Restaurant.findOneAndUpdate(
       { _id: id, property: propertyId },
@@ -1092,13 +1065,51 @@ exports.deleteTable = async (req, res) => {
 // MENU CATEGORIES & ITEMS MANAGEMENT
 // ==========================================
 
+function validMenuName(value) {
+  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 80;
+}
+
+async function ownedRestaurant(property, restaurantId) {
+  if (!mongoose.Types.ObjectId.isValid(restaurantId)) return null;
+  return Restaurant.findOne({ _id: restaurantId, property });
+}
+
+async function hasDuplicateCategory(property, restaurant, name, excludedId) {
+  const rows = await RestaurantMenuCategory.find({ property, restaurant, ...(excludedId ? { _id: { $ne: excludedId } } : {}) })
+    .select("name").lean();
+  const normalized = name.trim().toLocaleLowerCase();
+  return rows.some((row) => row.name.trim().toLocaleLowerCase() === normalized);
+}
+
+exports.getAdminMenuCategories = async (req, res) => {
+  try {
+    const property = req.propertyId;
+    if (!property) return res.status(400).json({ error: "Property context required" });
+    const { restaurantId } = req.query;
+    if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId) || !(await ownedRestaurant(property, restaurantId))) {
+      return res.status(404).json({ error: "Restaurant not found in current property" });
+    }
+    const categories = await RestaurantMenuCategory.find({ property, restaurant: restaurantId })
+      .sort({ sortOrder: 1, name: 1 }).lean();
+    return res.json({ success: true, data: categories });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to fetch menu categories" });
+  }
+};
+
 exports.createMenuCategory = async (req, res) => {
   try {
-    const propertyId = req.propertyId;
-    const category = await RestaurantMenuCategory.create({ ...req.body, property: propertyId });
+    const property = req.propertyId;
+    const { restaurant: restaurantId, name, description = "", sortOrder = 0, active = true } = req.body || {};
+    if (!property || !(await ownedRestaurant(property, restaurantId))) return res.status(404).json({ error: "Restaurant not found in current property" });
+    if (!validMenuName(name)) return res.status(400).json({ error: "Category name is required and must be at most 80 characters" });
+    if (await hasDuplicateCategory(property, restaurantId, name)) {
+      return res.status(409).json({ error: "A category with this name already exists in this restaurant" });
+    }
+    const category = await RestaurantMenuCategory.create({ restaurant: restaurantId, name: name.trim(), description, sortOrder, active, property });
     return res.status(201).json({ success: true, data: category });
   } catch (err) {
-    return res.status(400).json({ error: err.message || "Failed to create menu category" });
+    return res.status(err.code === 11000 ? 409 : 400).json({ error: err.code === 11000 ? "Category already exists" : err.message || "Failed to create menu category" });
   }
 };
 
@@ -1106,12 +1117,18 @@ exports.updateMenuCategory = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { id } = req.params;
-    const category = await RestaurantMenuCategory.findOneAndUpdate(
-      { _id: id, property: propertyId },
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const category = await RestaurantMenuCategory.findOne({ _id: id, property: propertyId });
     if (!category) return res.status(404).json({ error: "Category not found" });
+    const updates = {};
+    if (req.body.name !== undefined) {
+      if (!validMenuName(req.body.name)) return res.status(400).json({ error: "Category name is required and must be at most 80 characters" });
+      const duplicate = await hasDuplicateCategory(propertyId, category.restaurant, req.body.name, id);
+      if (duplicate) return res.status(409).json({ error: "A category with this name already exists in this restaurant" });
+      updates.name = req.body.name.trim();
+    }
+    for (const key of ["description", "sortOrder", "active"]) if (req.body[key] !== undefined) updates[key] = req.body[key];
+    category.set(updates);
+    await category.save();
     return res.status(200).json({ success: true, data: category });
   } catch (err) {
     return res.status(400).json({ error: err.message || "Failed to update category" });
@@ -1122,10 +1139,12 @@ exports.deleteMenuCategory = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { id } = req.params;
-    await RestaurantMenuItem.deleteMany({ category: id, property: propertyId });
-    const cat = await RestaurantMenuCategory.findOneAndDelete({ _id: id, property: propertyId });
+    const cat = await RestaurantMenuCategory.findOne({ _id: id, property: propertyId });
     if (!cat) return res.status(404).json({ error: "Category not found" });
-    return res.status(200).json({ success: true, message: "Category and associated items deleted" });
+    const items = await RestaurantMenuItem.find({ category: id, property: propertyId }).select("_id").lean();
+    if (items.length) return res.status(409).json({ error: "Move or delete all menu items before deleting this category" });
+    await cat.deleteOne();
+    return res.status(200).json({ success: true, message: "Category deleted" });
   } catch (err) {
     return res.status(500).json({ error: "Failed to delete category" });
   }
@@ -1135,9 +1154,17 @@ exports.getAdminMenuItems = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { restaurantId, categoryId } = req.query;
+    if (!propertyId) return res.status(400).json({ error: "Property context required" });
     const query = { property: propertyId };
-    if (restaurantId) query.restaurant = restaurantId;
-    if (categoryId) query.category = categoryId;
+    if (restaurantId) {
+      if (!(await ownedRestaurant(propertyId, restaurantId))) return res.status(404).json({ error: "Restaurant not found in current property" });
+      query.restaurant = restaurantId;
+    }
+    if (categoryId) {
+      const category = await RestaurantMenuCategory.findOne({ _id: categoryId, property: propertyId, ...(restaurantId ? { restaurant: restaurantId } : {}) }).select("_id");
+      if (!category) return res.status(404).json({ error: "Category not found in current restaurant/property" });
+      query.category = categoryId;
+    }
 
     const items = await RestaurantMenuItem.find(query)
       .populate("category", "name")
@@ -1153,7 +1180,15 @@ exports.getAdminMenuItems = async (req, res) => {
 exports.createMenuItem = async (req, res) => {
   try {
     const propertyId = req.propertyId;
-    const item = await RestaurantMenuItem.create({ ...req.body, property: propertyId });
+    const { restaurant: restaurantId, category: categoryId, name, price } = req.body || {};
+    if (!propertyId || !(await ownedRestaurant(propertyId, restaurantId))) return res.status(404).json({ error: "Restaurant not found in current property" });
+    if (!validMenuName(name)) return res.status(400).json({ error: "Item name is required and must be at most 80 characters" });
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) return res.status(400).json({ error: "Price must be a positive number" });
+    const category = await RestaurantMenuCategory.findOne({ _id: categoryId, property: propertyId, restaurant: restaurantId, active: true });
+    if (!category) return res.status(400).json({ error: "Category must be active and belong to the selected restaurant" });
+    const allowed = ["name", "description", "price", "currency", "image", "dietaryTags", "allergens", "available", "featured", "sortOrder"];
+    const fields = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
+    const item = await RestaurantMenuItem.create({ ...fields, restaurant: restaurantId, category: categoryId, property: propertyId });
     return res.status(201).json({ success: true, data: item });
   } catch (err) {
     return res.status(400).json({ error: err.message || "Failed to create menu item" });
@@ -1164,12 +1199,18 @@ exports.updateMenuItem = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { id } = req.params;
-    const item = await RestaurantMenuItem.findOneAndUpdate(
-      { _id: id, property: propertyId },
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const item = await RestaurantMenuItem.findOne({ _id: id, property: propertyId });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
+    const allowed = ["name", "description", "price", "image", "dietaryTags", "allergens", "available", "featured", "sortOrder", "category"];
+    const updates = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+    if (updates.name !== undefined && !validMenuName(updates.name)) return res.status(400).json({ error: "Item name is required and must be at most 80 characters" });
+    if (updates.price !== undefined && (typeof updates.price !== "number" || !Number.isFinite(updates.price) || updates.price <= 0)) return res.status(400).json({ error: "Price must be a positive number" });
+    if (updates.category !== undefined) {
+      const category = await RestaurantMenuCategory.findOne({ _id: updates.category, property: propertyId, restaurant: item.restaurant, active: true });
+      if (!category) return res.status(400).json({ error: "Category must be active and belong to this item's restaurant" });
+    }
+    item.set(updates);
+    await item.save();
     return res.status(200).json({ success: true, data: item });
   } catch (err) {
     return res.status(400).json({ error: err.message || "Failed to update menu item" });
@@ -1180,9 +1221,16 @@ exports.deleteMenuItem = async (req, res) => {
   try {
     const propertyId = req.propertyId;
     const { id } = req.params;
-    const item = await RestaurantMenuItem.findOneAndDelete({ _id: id, property: propertyId });
+    const item = await RestaurantMenuItem.findOne({ _id: id, property: propertyId });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
-    return res.status(200).json({ success: true, message: "Menu item deleted successfully" });
+    const referenced = await RestaurantOrder.exists({ property: propertyId, "items.menuItem": item._id });
+    if (referenced) {
+      item.available = false;
+      await item.save();
+      return res.status(200).json({ success: true, deactivated: true, message: "This item appears in order history, so it was made unavailable instead of deleted" });
+    }
+    await item.deleteOne();
+    return res.status(200).json({ success: true, message: "Menu item deleted" });
   } catch (err) {
     return res.status(500).json({ error: "Failed to delete menu item" });
   }
@@ -1406,47 +1454,15 @@ exports.getAdminReservations = async (req, res) => {
       return leftUpcoming ? leftDate - rightDate : rightDate - leftDate;
     };
 
-    const reservationIds = reservations.map((reservation) => reservation._id);
-    const payments = reservationIds.length ? await Payment.find({
-      property: propertyId,
-      restaurantReservation: { $in: reservationIds }
-    }).sort({ createdAt: -1 }).lean() : [];
-
-    const paymentsByReservation = new Map();
-    payments.forEach((payment) => {
-      const key = String(payment.restaurantReservation);
-      if (!paymentsByReservation.has(key)) paymentsByReservation.set(key, []);
-      paymentsByReservation.get(key).push(payment);
-    });
-
+    const paymentsByReservation = await getReservationPaymentsById(reservations);
     const enrichedReservations = reservations
-      .map((reservation) => {
-        const relatedPayments = paymentsByReservation.get(String(reservation._id)) || [];
-        const confirmedPayments = relatedPayments.filter((payment) => payment.paymentStatus === "completed");
-        const amountPaid = confirmedPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
-        const savedTotal = reservation.reservationTotalPrice != null
-          ? Number(reservation.reservationTotalPrice)
-          : (reservation.totalAmount != null && reservation.totalAmount > 0 ? Number(reservation.totalAmount) : null);
-        const currency = reservation.reservationPriceCurrency || reservation.currency || "LKR";
-        const outstandingBalance = savedTotal != null ? Math.max(0, savedTotal - amountPaid) : null;
-        let paymentStatus = "Unpaid";
-        if (savedTotal == null) paymentStatus = "Historical - price unavailable";
-        else if (amountPaid >= savedTotal && savedTotal > 0) paymentStatus = "Paid";
-        else if (confirmedPayments.length > 0 && amountPaid > 0) paymentStatus = "Partially Paid";
-        else if (relatedPayments.some((payment) => payment.paymentStatus === "pending" || payment.paymentStatus === "processing")) paymentStatus = "Pending";
-        else if (relatedPayments.some((payment) => payment.paymentStatus === "failed")) paymentStatus = "Failed";
-        return {
-          ...reservation,
-          endTime: getReservationEndTime(reservation.time),
-          savedReservationTotal: savedTotal,
-          savedReservationCurrency: currency,
-          amountPaid,
-          outstandingBalance,
-          paymentStatus,
+      .map(reservation => ({
+        ...reservation,
+        endTime: getReservationEndTime(reservation.time),
+        ...summarizeReservationPayment(reservation, paymentsByReservation.get(String(reservation._id)) || []),
           type: "dining",
           source: "restaurant_dining"
-        };
-      })
+      }))
       .sort(sortReservations);
 
     return res.status(200).json({
@@ -1465,7 +1481,7 @@ exports.updateReservationStatus = async (req, res) => {
     const propertyId = req.propertyId;
     const { id } = req.params;
     const { status, tableId, notes } = req.body;
-    const allowedStatuses = ["PENDING", "CONFIRMED", "SEATED", "COMPLETED", "CANCELLED", "NO_SHOW"];
+    const allowedStatuses = Object.keys(RESERVATION_TRANSITIONS);
     if (status && !allowedStatuses.includes(status)) return res.status(400).json({ error: "Invalid reservation status" });
 
     const reservation = await RestaurantReservation.findOne({ _id: id, property: propertyId });
@@ -1473,31 +1489,50 @@ exports.updateReservationStatus = async (req, res) => {
       return res.status(404).json({ error: "Reservation not found" });
     }
 
-    if (status) {
-      reservation.status = status;
+    if (status && !validReservationTransition(reservation.status, status)) {
+      return res.status(409).json({ error: `Reservation cannot transition from ${reservation.status} to ${status}` });
     }
 
+    if (status === "SEATED") {
+      const seated = await seatReservation({
+        property: propertyId, restaurant: reservation.restaurant,
+        reservationId: reservation._id, userId: req.user.id
+      });
+      return res.status(200).json({ success: true, message: "Guest seated successfully", data: seated });
+    }
+    if (status === "COMPLETED" && reservation.status === "SEATED") {
+      const completed = await completeReservation({ property: propertyId, reservationId: reservation._id });
+      return res.status(200).json({ success: true, message: "Reservation completed successfully", data: completed });
+    }
+
+    const updates = {};
+    if (status) updates.status = status;
     if (tableId !== undefined) {
       if (tableId && mongoose.Types.ObjectId.isValid(tableId)) {
-        reservation.table = tableId;
-        // Optionally update table status if guest is seated
-        if (status === "SEATED") {
-          await RestaurantTable.findOneAndUpdate({ _id: tableId, property: propertyId }, { status: "OCCUPIED" });
-        } else if (status === "COMPLETED") {
-          await RestaurantTable.findOneAndUpdate({ _id: tableId, property: propertyId }, { status: "CLEANING" });
-        }
+        const assignedTable = await RestaurantTable.findOne({
+          _id: tableId, property: propertyId, restaurant: reservation.restaurant, active: true
+        }).select("_id").lean();
+        if (!assignedTable) return res.status(404).json({ error: "Table not found for this restaurant" });
+        updates.table = tableId;
       } else if (!tableId) {
-        reservation.table = undefined;
+        updates.table = undefined;
       }
     }
 
     if (notes !== undefined) {
-      reservation.notes = notes;
+      updates.notes = notes;
     }
 
-    await reservation.save();
+    const updatedReservation = await RestaurantReservation.findOneAndUpdate(
+      { _id: reservation._id, property: propertyId, status: reservation.status },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    if (!updatedReservation) {
+      return res.status(409).json({ error: "Reservation changed while this update was being applied" });
+    }
 
-    const updated = await RestaurantReservation.findById(reservation._id)
+    const updated = await RestaurantReservation.findById(updatedReservation._id)
       .populate("restaurant", "name")
       .populate("table", "tableNumber capacity location");
 
@@ -1508,7 +1543,7 @@ exports.updateReservationStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("updateReservationStatus error:", err);
-    return res.status(400).json({ error: err.message || "Failed to update reservation" });
+    return res.status(err.statusCode || 400).json({ error: err.message || "Failed to update reservation" });
   }
 };
 
@@ -1519,94 +1554,71 @@ exports.updateReservationStatus = async (req, res) => {
  */
 exports.chargeReservationToFolio = async (req, res) => {
   try {
-    const propertyId = req.propertyId;
+    const { propertyId } = req;
     const { id } = req.params;
     const { amount, description, notes } = req.body;
-
-    const reservation = await RestaurantReservation.findOne({ _id: id, property: propertyId })
-      .populate("restaurant", "name");
-
-    if (!reservation) {
-      return res.status(404).json({ error: "Restaurant reservation not found" });
-    }
-
-    const savedTotal = reservation.reservationTotalPrice != null
-      ? Number(reservation.reservationTotalPrice)
-      : null;
-    if (savedTotal == null) {
-      return res.status(400).json({ error: "This historical reservation has no recorded price. No folio charge will be created." });
-    }
-
-    const billAmount = parseFloat(amount);
-    if (!Number.isFinite(billAmount) || billAmount <= 0) {
-      return res.status(400).json({ error: "Valid charge amount greater than 0 is required" });
-    }
-    if (Math.abs(billAmount - savedTotal) > 0.01) {
-      return res.status(400).json({ error: "Folio amount must match the saved dining reservation total" });
-    }
-
-    if (reservation.billedToFolio) {
-      return res.status(400).json({ error: "This dining bill has already been charged to guest folio" });
-    }
-
-    if (reservation.guestType !== "Hotel Guest" || !reservation.hotelReservation) {
-      return res.status(400).json({
-        error: "This reservation is not linked to an active hotel stay. Folio charging is only available for staying hotel guests."
-      });
-    }
-
-    // Lookup hotel reservation
-    const hotelStay = await Reservation.findOne({
-      _id: reservation.hotelReservation,
-      property: propertyId
-    });
-
-    if (!hotelStay) {
-      return res.status(404).json({ error: "Linked hotel reservation could not be found in active property" });
-    }
-
-    // Create GuestExpense in folio
-    const restaurantName = reservation.restaurant?.name || "Hotel Restaurant";
-    const chargeDescription = description || `${restaurantName} Dining (Ref: ${reservation.confirmationNumber})`;
-
-    const guestExpense = await GuestExpense.create({
-      property: propertyId,
-      reservation: hotelStay._id,
-      guest: hotelStay.guest,
-      expenseDate: new Date(),
-      category: "Restaurant",
-      description: chargeDescription,
-      quantity: 1,
-      unitPrice: billAmount,
-      amount: billAmount,
-      taxPercentage: 0,
-      taxAmount: 0,
-      totalAmount: billAmount,
-      paymentStatus: "Added to Bill",
-      addedBy: req.user._id,
-      notes: notes || `Direct charge from Restaurant Management. Table reservation: ${reservation.confirmationNumber}`
-    });
-
-    // Update RestaurantReservation record
-    reservation.billedToFolio = true;
-    reservation.folioExpenseId = guestExpense._id;
-    // Folio charges must use the existing reservation snapshot or an explicit
-    // authorized charge amount, never replace a missing historical snapshot.
-    if (reservation.reservationTotalPrice == null && reservation.totalAmount == null) {
-      reservation.totalAmount = billAmount;
-    }
-    await reservation.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Successfully charged ${billAmount.toLocaleString()} to Guest Folio (Room ${reservation.roomNumber || hotelStay.roomType})`,
-      data: {
-        reservation,
-        folioExpense: guestExpense
+    const reject = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
+    const result = await mongoose.connection.transaction(async session => {
+      const reservation = await RestaurantReservation.findOne({ _id: id, property: propertyId })
+        .populate("restaurant", "name").session(session);
+      if (!reservation) reject(404, "Restaurant reservation not found");
+      if (reservation.reservationTotalPrice == null) reject(400, "This historical reservation has no recorded price. No folio charge will be created.");
+      const billAmount = Number(amount);
+      if (!Number.isFinite(billAmount) || billAmount <= 0) reject(400, "Valid charge amount greater than 0 is required");
+      if (Math.round(billAmount * 100) !== Math.round(reservation.reservationTotalPrice * 100)) {
+        reject(400, "Folio amount must match the saved dining reservation total");
       }
+      if (reservation.billedToFolio) reject(400, "This dining bill has already been charged to guest folio");
+      if (["CANCELLED", "NO_SHOW"].includes(reservation.status)) reject(409, "This reservation cannot be charged to the folio");
+      if (reservation.guestType !== "Hotel Guest" || !reservation.hotelReservation) {
+        reject(400, "This reservation is not linked to a hotel stay");
+      }
+      const payments = await Payment.find(reservationPaymentQuery(reservation._id)).session(session);
+      const balance = summarizeReservationPayment(reservation, payments);
+      if (balance.paidAmount > 0 || balance.paymentReconciliationRequired ||
+          payments.some(payment => ["pending", "processing"].includes(payment.paymentStatus))) {
+        reject(409, "An online dining payment must be reconciled before posting to the folio");
+      }
+      const hotelStay = await Reservation.findOne({
+        _id: reservation.hotelReservation, property: propertyId, status: "Checked-In"
+      }).session(session);
+      if (!hotelStay || !hotelStay.guest) reject(409, "A linked checked-in hotel stay is required");
+
+      // This write serializes this charge with order folio posting and checkout across app instances.
+      const lockedStay = await Reservation.updateOne({
+        _id: hotelStay._id, property: propertyId, status: "Checked-In"
+      }, { $inc: { __v: 1 } }, { session });
+      if (!lockedStay.matchedCount) reject(409, "The linked hotel stay is no longer checked in");
+      if (await Invoice.exists({ reservation: hotelStay._id }).session(session)) {
+        reject(409, "The stay already has an invoice. No folio charge will be added.");
+      }
+
+      const expense = new GuestExpense({
+        property: propertyId, reservation: hotelStay._id, guest: hotelStay.guest, expenseDate: new Date(),
+        category: "Restaurant", quantity: 1, unitPrice: billAmount, amount: billAmount, totalAmount: billAmount,
+        description: description || `${reservation.restaurant?.name || "Hotel Restaurant"} Dining (Ref: ${reservation.confirmationNumber})`,
+        paymentStatus: "Added to Bill", addedBy: req.user._id,
+        notes: notes || `Direct charge from Restaurant Management. Table reservation: ${reservation.confirmationNumber}`
+      });
+      await expense.save({ session });
+      const postedReservation = await RestaurantReservation.findOneAndUpdate({
+        _id: reservation._id,
+        property: propertyId,
+        billedToFolio: { $ne: true },
+        status: { $nin: ["CANCELLED", "NO_SHOW"] }
+      }, { $set: { billedToFolio: true, folioExpenseId: expense._id } }, {
+        new: true, runValidators: true, session
+      }).populate("restaurant", "name");
+      if (!postedReservation) reject(409, "This dining bill has already been charged or is no longer eligible");
+      return { reservation: postedReservation, folioExpense: expense, billAmount };
+    });
+    return res.json({
+      success: true,
+      message: `Successfully charged ${result.billAmount.toLocaleString()} to Guest Folio`,
+      data: { reservation: result.reservation, folioExpense: result.folioExpense }
     });
   } catch (err) {
-    console.error("chargeReservationToFolio error:", err);
-    return res.status(500).json({ error: err.message || "Failed to post charge to guest folio" });
+    if (!err.statusCode) console.error("chargeReservationToFolio error:", err);
+    return res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to post charge to guest folio" });
   }
 };

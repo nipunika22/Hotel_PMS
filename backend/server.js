@@ -10,8 +10,24 @@ dotenv.config();
 // Initialize Express app
 const app = express();
 
-// Middleware
-app.use(cors());
+const allowedOrigins = new Set(
+  [
+    ...(process.env.NODE_ENV === "production" ? [] : [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ]),
+    process.env.FRONTEND_URL,
+    ...(process.env.FRONTEND_ORIGINS || "").split(",")
+  ].filter(Boolean).map((origin) => origin.trim().replace(/\/+$/, ""))
+);
+
+// Handle preflight and add CORS headers before database and route middleware.
+app.use(cors({
+  origin: (origin, callback) => callback(null, allowedOrigins.has(origin)),
+  credentials: true,
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Property-Id", "X-Dining-Guest-Token"]
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -92,7 +108,7 @@ if (require.main === module) {
 
       server.on("error", (err) => {
         if (err.code === "EADDRINUSE") {
-          console.error(`Port ${PORT} is already in use. Kill the running process or choose another port.`);
+          console.error(`Port ${PORT} is already in use. Free the port or set PORT to an available port and point REACT_APP_API_URL at it.`);
         } else {
           console.error("Server error:", err);
         }

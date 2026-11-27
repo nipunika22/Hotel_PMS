@@ -11,6 +11,7 @@ const PaymentSuccess = () => {
   const navigate = useNavigate();
   const query = new URLSearchParams(location.search);
   const paymentRef = query.get('ref') || query.get('order_id');
+  const propertyId = query.get("propertyId");
 
   const [loading, setLoading] = useState(true);
   const [payment, setPayment] = useState(null);
@@ -29,7 +30,7 @@ const PaymentSuccess = () => {
     const checkStatus = async () => {
       try {
         attempts++;
-        const res = await paymentAPI.verifyPaymentStatus(paymentRef);
+        const res = await paymentAPI.verifyPaymentStatus(paymentRef, propertyId);
         if (res.data?.paymentStatus === 'completed') {
           setPayment(res.data);
           setLoading(false);
@@ -55,7 +56,7 @@ const PaymentSuccess = () => {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [paymentRef]);
+  }, [paymentRef, propertyId]);
 
   return (
     <CustomerLayout>

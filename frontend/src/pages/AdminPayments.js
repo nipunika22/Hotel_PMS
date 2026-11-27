@@ -166,6 +166,8 @@ const AdminPayments = () => {
             <FaClock size={11} /> Pending
           </span>
         );
+      case 'posted_to_folio':
+        return <span className="badge badge-info">Posted to folio</span>;
       case 'partially_refunded':
         return (
           <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
@@ -192,6 +194,7 @@ const AdminPayments = () => {
   const getPurposeIcon = (purpose) => {
     switch (purpose) {
       case 'room_booking': return <FaBed style={{ color: '#1E3A8A' }} />;
+      case 'restaurant_order':
       case 'restaurant_dining': return <FaUtensils style={{ color: '#D97706' }} />;
       case 'event_booking': return <FaGlassCheers style={{ color: '#B68C48' }} />;
       case 'invoice_settlement': return <FaFileInvoiceDollar style={{ color: '#059669' }} />;
@@ -202,7 +205,8 @@ const AdminPayments = () => {
   const formatPurposeName = (purpose) => {
     switch (purpose) {
       case 'room_booking': return 'Room Reservation';
-      case 'restaurant_dining': return 'Restaurant Dining';
+      case 'restaurant_dining': return 'Dining Reservation';
+      case 'restaurant_order': return 'Restaurant Food Order';
       case 'event_booking': return 'Event & Banquet';
       case 'invoice_settlement': return 'Invoice Settlement';
       default: return purpose?.replace('_', ' ');
@@ -351,6 +355,7 @@ const AdminPayments = () => {
             <option value="completed">Completed</option>
             <option value="pending">Pending</option>
             <option value="partially_refunded">Partially Refunded</option>
+            <option value="posted_to_folio">Posted to Folio</option>
             <option value="refunded">Refunded</option>
             <option value="failed">Failed</option>
             <option value="cancelled">Cancelled</option>
@@ -372,7 +377,8 @@ const AdminPayments = () => {
           >
             <option value="ALL">All Services</option>
             <option value="room_booking">Room Reservations</option>
-            <option value="restaurant_dining">Restaurant Dining</option>
+            <option value="restaurant_dining">Dining Reservations</option>
+            <option value="restaurant_order">Restaurant Food Orders</option>
             <option value="event_booking">Event & Banquets</option>
             <option value="invoice_settlement">Invoices</option>
           </select>
@@ -503,6 +509,7 @@ const AdminPayments = () => {
 
                       <td style={{ padding: '0.85rem 1rem' }}>
                         {getStatusBadge(p.paymentStatus)}
+                        {p.reconciliationRequired && <div>Reconciliation required</div>}
                       </td>
 
                       <td style={{ padding: '0.85rem 1rem', color: '#64748B', fontSize: '0.8rem' }}>
@@ -521,7 +528,7 @@ const AdminPayments = () => {
                             <FaEye /> View
                           </button>
 
-                          {canRefund && p.paymentStatus === 'completed' && (
+                          {canRefund && p.purpose !== 'restaurant_order' && p.paymentStatus === 'completed' && (
                             <button
                               type="button"
                               className="btn btn-outline-danger btn-sm"
@@ -602,6 +609,7 @@ const AdminPayments = () => {
                 <div>
                   <span style={{ color: '#64748B' }}>Status:</span><br />
                   <div style={{ marginTop: '0.2rem' }}>{getStatusBadge(selectedPayment.paymentStatus)}</div>
+                  {selectedPayment.reconciliationRequired && <p role="status">{selectedPayment.reconciliationReason || "Payment reconciliation required"}</p>}
                 </div>
                 <div>
                   <span style={{ color: '#64748B' }}>Customer:</span><br />

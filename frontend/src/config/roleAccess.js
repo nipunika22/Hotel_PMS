@@ -57,6 +57,7 @@ const DEPARTMENT_NAVIGATION = Object.freeze([
     items: Object.freeze([
       Object.freeze({ path: '/admin/restaurants/dashboard', label: 'Restaurant Dashboard', route: 'restaurantDashboard', permission: 'dining', icon: 'dining' }),
       Object.freeze({ path: '/admin/restaurants', label: 'Restaurants & Dining', route: 'restaurants', permission: 'dining', icon: 'dining' }),
+      Object.freeze({ path: '/admin/menu-management', label: 'Menu Management', route: 'restaurants', permission: 'dining', icon: 'dining' }),
       Object.freeze({ path: '/admin/dining-offers', label: 'Restaurant & Dining Offers', route: 'diningOffers', permission: ['dining', 'offers.dining'], icon: 'diningOffers' })
     ])
   }),

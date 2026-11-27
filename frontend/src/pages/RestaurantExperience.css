@@ -2209,6 +2209,25 @@
   width: 100%;
   color: var(--c-text-muted);
 }
+.rest-res-availability-error {
+  margin: 0 0 1rem;
+  padding: .7rem .85rem;
+  border: 1px solid rgba(198, 40, 40, .28);
+  border-radius: 6px;
+  background: rgba(198, 40, 40, .08);
+  color: #9f2222;
+  font-size: .85rem;
+}
+.rest-availability-retry {
+  padding: .2rem .5rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 .rest-admin-reservation-price {
   display: flex;

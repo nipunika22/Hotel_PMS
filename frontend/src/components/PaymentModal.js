@@ -21,6 +21,7 @@ const PaymentModal = ({
   onClose,
   purpose = 'room_booking',
   targetId,
+  propertyId,
   itemSummary = {},
   onPaymentSuccess
 }) => {
@@ -37,7 +38,7 @@ const PaymentModal = ({
       setError(null);
       fetchInitiationDetails();
     }
-  }, [isOpen, targetId, purpose]);
+  }, [isOpen, targetId, purpose, propertyId]);
 
   const fetchInitiationDetails = async () => {
     try {
@@ -45,7 +46,8 @@ const PaymentModal = ({
       setError(null);
       const res = await paymentAPI.initiatePayment({
         purpose,
-        targetId
+        targetId,
+        propertyId
       });
       if (res.data?.success) {
         setPaymentData(res.data);
@@ -323,7 +325,7 @@ const PaymentModal = ({
                   <FaArrowRight size={13} />
                 </button>
 
-                {paymentData?.payHereParams?.sandbox && (
+                {purpose !== "restaurant_dining" && paymentData?.payHereParams?.sandbox && (
                   <button
                     type="button"
                     className="serendib-btn-sandbox-sim"

@@ -1,9 +1,15 @@
 const express = require("express");
 const router = express.Router();
+const operations = require("../controllers/restaurantOperationsController");
 const restaurantController = require("../controllers/restaurantController");
 const { protect, authorize, optionalAuth } = require("../middleware/auth");
+const { createRateLimiter } = require("../middleware/rateLimiter");
 const requireDepartmentPermission = require("../middleware/requireDepartmentPermission");
 
+const verifyDiningGuest = createRateLimiter({
+  namespace: "dining-verification", max: 20, windowMs: 60_000,
+  message: "Too many dining verification requests. Try again shortly."
+});
 const STAFF_ROLES = ["admin", "manager", "staff", "finance"];
 
 router.use("/admin", protect, (req, res, next) => {
@@ -20,19 +26,32 @@ router.use("/admin", protect, (req, res, next) => {
 router.get("/", restaurantController.getRestaurants);
 
 // Hotel guest lookup (to link stay)
-router.post("/lookup-hotel-stay", restaurantController.lookupHotelStay);
+router.post("/lookup-hotel-stay", optionalAuth, verifyDiningGuest, restaurantController.lookupHotelStay);
 
 // Authenticated customer dining reservations (placed before /:slug)
 router.get("/my-reservations", protect, restaurantController.getMyReservations);
 
 // Single reservation lookup & cancellation by confirmation reference
-router.get("/reservations/:ref", restaurantController.getReservationByRef);
-router.put("/reservations/:ref/cancel", restaurantController.cancelReservation);
+router.get("/reservations/:ref", optionalAuth, verifyDiningGuest, restaurantController.getReservationByRef);
+router.put("/reservations/:ref/cancel", optionalAuth, verifyDiningGuest, restaurantController.cancelReservation);
 
 
 // ==========================================
 // ADMIN / STAFF MANAGEMENT ROUTES (PROTECTED)
 // ==========================================
+const operationsPath = "/admin/operations/:restaurantId";
+const operationsAccess = authorize(...STAFF_ROLES);
+router.get("/admin/operations", operationsAccess, operations.dashboard);
+router.get(`${operationsPath}/reservations`, operationsAccess, operations.reservations);
+router.put(`${operationsPath}/reservations/:reservationId/arrival`, operationsAccess, operations.arrive);
+router.put(`${operationsPath}/reservations/:reservationId/seat`, operationsAccess, operations.seat);
+router.get(`${operationsPath}/menu`, operationsAccess, operations.menu);
+router.post(`${operationsPath}/reservations/:reservationId/order`, operationsAccess, operations.createOrder);
+router.put(`${operationsPath}/reservations/:reservationId/order`, operationsAccess, operations.updateOrder);
+router.get(`${operationsPath}/orders/:orderId`, operationsAccess, operations.bill);
+router.post(`${operationsPath}/orders/:orderId/payment`, operationsAccess, operations.pay);
+router.get(`${operationsPath}/sales`, operationsAccess, operations.sales);
+
 // Note: Placed before /:slug so "admin" is not captured as slug!
 
 router.get(
@@ -95,6 +114,12 @@ router.delete(
 );
 
 // Admin menu categories
+router.get(
+  "/admin/categories",
+  protect,
+  authorize(...STAFF_ROLES),
+  restaurantController.getAdminMenuCategories
+);
 router.post(
   "/admin/categories",
   protect,
@@ -229,7 +254,8 @@ router.get("/:id/menu", restaurantController.getRestaurantMenu);
 router.get("/:id/buffets", restaurantController.getRestaurantBuffets);
 router.get("/:id/offers", restaurantController.getRestaurantOffers);
 router.get("/:id/availability", restaurantController.checkAvailability);
-router.post("/:id/reservations", optionalAuth, restaurantController.createReservation);
+router.post("/:id/reservations", optionalAuth, (req, res, next) =>
+  req.body?.guestType === "Hotel Guest" ? verifyDiningGuest(req, res, next) : next(), restaurantController.createReservation);
 
 module.exports = router;
 

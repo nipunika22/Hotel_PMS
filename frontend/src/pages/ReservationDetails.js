@@ -227,7 +227,13 @@ const ReservationDetails = () => {
         navigate(`/invoices/${invoiceRes.data[0]._id}`);
       }
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to check out');
+      const { error: message, invoiceId } = error.response?.data || {};
+      if (invoiceId) {
+        toast.warning(message);
+        navigate(`/invoices/${invoiceId}`);
+      } else {
+        toast.error(message || 'Failed to check out');
+      }
     }
   };
 

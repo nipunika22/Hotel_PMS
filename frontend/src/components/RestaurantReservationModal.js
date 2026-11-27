@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import { format, addDays } from 'date-fns';
 import { calculateDiningPrice, isGuestCountWithinCapacity } from '../config/diningPricing';
+import { normalizeAvailabilityResult } from '../utils/diningAvailability';
 
 
 const SEATING_OPTIONS = [
@@ -107,16 +108,20 @@ const RestaurantReservationModal = ({
 
 
   // Hotel lookup state
-  const [hotelLookupQuery, setHotelLookupQuery] = useState('');
+  const [hotelIdentity, setHotelIdentity] = useState({ reservationNumber: '', email: '', phone: '', roomNumber: '' });
   const [lookingUpStay, setLookingUpStay] = useState(false);
   const [linkedStayDetails, setLinkedStayDetails] = useState(null);
 
   // Real-time availability state
   const [checkingAvail, setCheckingAvail] = useState(false);
   const [availabilityData, setAvailabilityData] = useState(null);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [availabilityAttempt, setAvailabilityAttempt] = useState(0);
 
   // Submission state
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [confirmedReservation, setConfirmedReservation] = useState(null);
 
   // Initial load
@@ -213,9 +218,16 @@ const RestaurantReservationModal = ({
 
   // Check table availability on date/time/guest count changes
   useEffect(() => {
-    if (!selectedRestaurantId || !date || !time) return;
+    setAvailabilityData(null);
+    setSelectedTableId('');
+    setAvailabilityError('');
+    if (!selectedRestaurantId || !date || !time) {
+      setCheckingAvail(false);
+      return;
+    }
     if (!guestCountValid) {
       setAvailabilityData({ success: true, available: false, partySizeSupported: false, maxPartySize });
+      setCheckingAvail(false);
       return;
     }
 
@@ -230,10 +242,20 @@ const RestaurantReservationModal = ({
           seatingPreference
         });
         if (isMounted) {
-          setAvailabilityData(res.data);
+          const result = normalizeAvailabilityResult(res.data, guestCount, seatingPreference);
+          const tables = result.availableTables;
+          setAvailabilityData(result);
+          if (result?.available && tables.length) {
+            const suggested = tables.find(table => String(table._id) === String(result.suggestedTableId));
+            setSelectedTableId(String((suggested || tables[0])._id));
+          } else if (result?.available) {
+            setAvailabilityError('The restaurant service confirmed availability but did not provide a table choice. Check availability again.');
+          }
         }
       } catch (err) {
-        // Non-blocking
+        if (isMounted) {
+          setAvailabilityError(err.response?.data?.error || 'Could not check table availability. Please change the time or try again.');
+        }
       } finally {
         if (isMounted) setCheckingAvail(false);
       }
@@ -244,37 +266,30 @@ const RestaurantReservationModal = ({
       isMounted = false;
       clearTimeout(timeout);
     };
-  }, [selectedRestaurantId, date, time, guestCount, seatingPreference, guestCountValid, maxPartySize]);
+  }, [selectedRestaurantId, date, time, guestCount, seatingPreference, guestCountValid, maxPartySize, availabilityAttempt]);
 
   // Hotel Stay Lookup handler
   const handleHotelStayLookup = async (e) => {
     e.preventDefault();
-    if (!hotelLookupQuery.trim()) {
-      toast.warn('Please enter a reservation number, room number, or email');
+    if (!hotelIdentity.reservationNumber.trim() || !hotelIdentity.email.trim() || !hotelIdentity.phone.trim()) {
+      toast.warn('Enter the hotel reservation number, booking email and phone');
       return;
     }
 
     try {
       setLookingUpStay(true);
-      const res = await restaurantAPI.lookupHotelStay({
-        reservationNumber: hotelLookupQuery.trim(),
-        roomNumber: hotelLookupQuery.trim(),
-        email: hotelLookupQuery.trim()
-      });
-
-      if (res.data?.data) {
-        const stay = res.data.data;
-        setLinkedStayDetails(stay);
-        setHotelReservationId(stay.reservationId);
-        setRoomNumber(stay.roomNumber);
-        if (stay.guestName) setCustomerName(stay.guestName);
-        if (stay.email) setEmail(stay.email);
-        if (stay.phone) setPhone(stay.phone);
-        toast.success(`Verified stay for ${stay.guestName} (Room ${stay.roomNumber})`);
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Could not locate an active hotel reservation with those details');
+      setHotelReservationId(null);
       setLinkedStayDetails(null);
+      const res = await restaurantAPI.lookupHotelStay(hotelIdentity);
+      const stay = res.data.data;
+      setLinkedStayDetails(stay);
+      setHotelReservationId(stay.reservationId);
+      setRoomNumber(stay.roomNumber);
+      setEmail(hotelIdentity.email);
+      setPhone(hotelIdentity.phone);
+      toast.success('Hotel stay verified');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not verify the hotel stay');
     } finally {
       setLookingUpStay(false);
     }
@@ -283,6 +298,7 @@ const RestaurantReservationModal = ({
   // Submit reservation
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError('');
 
     if (!guestCountValid) {
       toast.error(`Choose between 1 and ${maxPartySize} guests for this restaurant.`);
@@ -295,6 +311,10 @@ const RestaurantReservationModal = ({
 
     if (!customerName || !email || !phone) {
       toast.error('Please provide your name, email, and phone number');
+      return;
+    }
+    if (!selectedTableId || !availabilityData?.availableTables?.some(table => String(table._id) === String(selectedTableId))) {
+      toast.error('Choose an available table for this reservation.');
       return;
     }
 
@@ -314,6 +334,7 @@ const RestaurantReservationModal = ({
         time,
         guestCount,
         seatingPreference,
+        tableId: selectedTableId,
         diningType,
         buffetSessionId: preselectedBuffetId || undefined,
         offerId: preselectedOfferId || undefined,
@@ -322,19 +343,45 @@ const RestaurantReservationModal = ({
       };
 
       const res = await restaurantAPI.createReservation(selectedRestaurantId, payload);
-      if (res.data?.success) {
-        setConfirmedReservation(res.data.data);
-        toast.success('Your table has been reserved successfully!');
+      const responseBody = res.data?.data?.data ? res.data.data : res.data;
+      if (!responseBody?.success || !responseBody?.data) {
+        throw new Error(responseBody?.error || 'The reservation could not be confirmed. Please try again.');
       }
+      setConfirmedReservation({ ...responseBody.data, guestManagementToken: responseBody.guestManagementToken });
+      toast.success('Your table has been reserved successfully!');
     } catch (err) {
       console.error('Reservation error', err);
-      toast.error(err.response?.data?.error || 'Failed to complete reservation. Please select another slot.');
+      const message = err.response?.data?.error || err.message || 'Failed to complete reservation. Please select another slot.';
+      setSubmitError(message);
+      toast.error(message);
+      if (err.response?.status === 409) {
+        setAvailabilityData(null);
+        setSelectedTableId('');
+        setAvailabilityAttempt(attempt => attempt + 1);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
   // Generate .ics calendar download
+  const handleCancelGuestBooking = async () => {
+    if (!window.confirm('Cancel this table reservation?')) return;
+    try {
+      setSubmitting(true);
+      await restaurantAPI.cancelReservation(confirmedReservation.confirmationNumber, {
+        guestToken: confirmedReservation.guestManagementToken,
+        propertyId: confirmedReservation.property
+      });
+      toast.success('Table reservation cancelled');
+      handleResetAndClose();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to cancel reservation');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDownloadCalendar = () => {
     if (!confirmedReservation) return;
 
@@ -432,6 +479,10 @@ const RestaurantReservationModal = ({
                     {confirmedReservation.restaurant?.name || 'Hotel Restaurant'}
                   </div>
                 </div>
+                {confirmedReservation.table?.tableNumber && <div>
+                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--c-text-muted)' }}>Assigned table</span>
+                  <div style={{ fontWeight: 600, color: 'var(--c-forest-deep)' }}>{confirmedReservation.table.tableNumber}</div>
+                </div>}
                 <div>
                   <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--c-text-muted)' }}>Date & Time</span>
                   <div style={{ fontWeight: 600, color: 'var(--c-forest-deep)' }}>
@@ -464,6 +515,13 @@ const RestaurantReservationModal = ({
               </div>
             </div>
 
+            {confirmedReservation.guestManagementToken && (
+              <details>
+                <summary>Guest reservation key</summary>
+                <p>Save this key privately if you need to verify or cancel your reservation later.</p>
+                <code style={{ overflowWrap: 'anywhere' }}>{confirmedReservation.guestManagementToken}</code>
+              </details>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
               <button 
                 type="button" 
@@ -472,6 +530,9 @@ const RestaurantReservationModal = ({
               >
                 <FaCalendarPlus /> Add to Calendar (.ics)
               </button>
+              {confirmedReservation.guestManagementToken && (
+                <button type="button" className="rest-btn-secondary" onClick={handleCancelGuestBooking} disabled={submitting}>Cancel reservation</button>
+              )}
               <Link
                 to="/my-bookings?tab=dining"
                 className="rest-btn-secondary"
@@ -694,10 +755,17 @@ const RestaurantReservationModal = ({
                       ? `This restaurant can seat up to ${availabilityData.maxPartySize || maxPartySize} guests at one table.`
                       : availabilityData.available 
                       ? `Tables available for ${guestCount} guests on this date and time.`
-                      : 'High demand slot: table availability is limited.'}
+                      : 'No table is currently available for this party and time. Change the date, time, guest count, or seating preference.'}
                   </span>
                 </div>
               )}
+              {availabilityError && <p role="alert" className="rest-res-availability-error">
+                {availabilityError}{' '}
+                <button type="button" className="rest-availability-retry" onClick={() => setAvailabilityAttempt(attempt => attempt + 1)}>
+                  Check again
+                </button>
+              </p>}
+              {submitError && <p role="alert" className="rest-res-availability-error">{submitError}</p>}
 
               {/* 3. Seating Preference & Occasion */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -730,6 +798,19 @@ const RestaurantReservationModal = ({
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div className="rest-form-group">
+                <label className="rest-form-label" htmlFor="dining-table-choice">Available table</label>
+                <select id="dining-table-choice" className="rest-form-select" value={selectedTableId}
+                  onChange={event => setSelectedTableId(event.target.value)}
+                  disabled={checkingAvail || !availabilityData?.available || !availabilityData.availableTables?.length} required>
+                  {!selectedTableId && <option value="">{checkingAvail ? 'Checking table availability…' : 'Choose a table'}</option>}
+                  {(availabilityData?.available ? availabilityData.availableTables || [] : []).map(table =>
+                    <option key={table._id} value={table._id}>
+                      {table.tableNumber || 'Available table'}{table.capacity ? ` · ${table.capacity} seats` : ''}{table.location ? ` · ${table.location}` : ''}
+                    </option>)}
+                </select>
               </div>
 
               {/* 4. Guest Type Toggle (Hotel Guest vs Outside Customer) */}
@@ -771,13 +852,22 @@ const RestaurantReservationModal = ({
                     Find Your Hotel Stay
                   </span>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input 
-                      type="text"
-                      className="rest-form-input"
-                      placeholder="Enter room number, reservation number, or email..."
-                      value={hotelLookupQuery}
-                      onChange={(e) => setHotelLookupQuery(e.target.value)}
-                    />
+                    <div style={{ display: 'grid', gap: '.5rem', flex: 1 }}>
+                      {[
+                        ['reservationNumber', 'Hotel reservation number', 'text'],
+                        ['email', 'Hotel booking email', 'email'],
+                        ['phone', 'Hotel booking phone', 'tel'],
+                        ['roomNumber', 'Room number (optional)', 'text']
+                      ].map(([field, label, type]) => (
+                        <label key={field}>{label}
+                          <input type={type} className="rest-form-input" value={hotelIdentity[field]} onChange={event => {
+                            setHotelIdentity({ ...hotelIdentity, [field]: event.target.value });
+                            setLinkedStayDetails(null);
+                            setHotelReservationId(null);
+                          }} />
+                        </label>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       className="rest-btn-primary"
@@ -791,7 +881,7 @@ const RestaurantReservationModal = ({
 
                   {linkedStayDetails && (
                     <div style={{ marginTop: '0.75rem', padding: '0.65rem', background: '#FFF', borderRadius: '4px', border: '1px solid #4CAF50', fontSize: '0.82rem', color: '#2E7D32' }}>
-                      ✓ Verified Stay: <strong>{linkedStayDetails.guestName}</strong> &bull; Room <strong>{linkedStayDetails.roomNumber}</strong> (Ref: {linkedStayDetails.reservationNumber})
+                      ✓ Verified Stay: <strong>{linkedStayDetails.reservationNumber}</strong>{linkedStayDetails.roomNumber && ` · Room ${linkedStayDetails.roomNumber}`}
                     </div>
                   )}
                 </div>
@@ -867,7 +957,7 @@ const RestaurantReservationModal = ({
                 <button 
                   type="submit" 
                   className="rest-btn-primary"
-                  disabled={submitting || loadingRestaurants || restaurants.length === 0 || !selectedRestaurantId || !guestCountValid || pricingPackageLoading || Boolean(pricingPackageError)}
+                  disabled={submitting || loadingRestaurants || restaurants.length === 0 || !selectedRestaurantId || !guestCountValid || pricingPackageLoading || Boolean(pricingPackageError) || checkingAvail || !availabilityData?.available || !selectedTableId}
                 >
                   {submitting ? 'Confirming Table...' : 'Confirm Reservation'}
                 </button>

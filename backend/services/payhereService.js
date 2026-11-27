@@ -118,10 +118,60 @@ const mapPayHereStatusCode = (statusCode) => {
   }
 };
 
+async function buildPayHereCheckout(payment, sessionUser, title, purpose, targetId) {
+  const User = require("../models/User");
+  const { amount: payableAmount, currency } = payment;
+  // Retrieve user contact details for checkout
+  const currentUser = await User.findById(sessionUser.id);
+  const firstName = currentUser?.name?.split(" ")[0] || "Valued";
+  const lastName = currentUser?.name?.split(" ").slice(1).join(" ") || "Guest";
+  const email = currentUser?.email || sessionUser.email || "";
+  const phone = currentUser?.phone || sessionUser.phone || "0770000000";
+  const address = currentUser?.address || "Serendib Guest Residence";
+
+  const config = getPayHereConfig();
+  const orderId = payment.paymentReference;
+  const hash = generatePaymentHash(orderId, payableAmount, currency);
+
+  // PayHere checkout payload
+  const payHereParams = {
+    sandbox: config.isSandbox,
+    merchant_id: config.merchantId,
+    return_url: `${config.frontendBaseUrl}/payment/success?ref=${orderId}`,
+    cancel_url: `${config.frontendBaseUrl}/payment/cancel?ref=${orderId}`,
+    notify_url: `${config.backendBaseUrl}/api/payments/payhere/notify`,
+    order_id: orderId,
+    items: title,
+    amount: formatPayHereAmount(payableAmount),
+    currency: currency.toUpperCase(),
+    hash: hash,
+    first_name: firstName,
+    last_name: lastName,
+    email: email,
+    phone: phone,
+    address: address,
+    city: "Colombo",
+    country: "Sri Lanka",
+    custom_1: purpose,
+    custom_2: String(targetId)
+  };
+
+  return {
+    success: true,
+    paymentId: payment._id,
+    paymentReference: payment.paymentReference,
+    amount: payableAmount,
+    currency,
+    checkoutUrl: config.checkoutUrl,
+    payHereParams
+  };
+}
+
 module.exports = {
   getPayHereConfig,
   formatPayHereAmount,
   generatePaymentHash,
   verifyNotificationSignature,
-  mapPayHereStatusCode
+  mapPayHereStatusCode,
+  buildPayHereCheckout
 };

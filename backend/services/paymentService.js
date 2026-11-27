@@ -53,8 +53,11 @@ async function getReservationFinancials(reservationId, session = null) {
 }
 
 async function getInvoicePaidAmount(invoice, session = null) {
+  const invoiceLinks = [{ invoice: invoice._id }];
+  const reservationId = invoice.reservation?._id || invoice.reservation;
+  if (reservationId) invoiceLinks.push({ reservation: reservationId });
   let query = Payment.find({
-    invoice: invoice._id,
+    $or: invoiceLinks,
     paymentStatus: { $in: ["completed", "partially_refunded"] }
   });
   if (session) query = query.session(session);
@@ -141,11 +144,8 @@ async function recordPayment(params) {
 
   // Resolve the common lock key so reservation- and invoice-based requests for the
   // same bill are serialized together within this process.
-  let lockKey = invoiceId || reservationId || bookingId;
-  if (reservationId && !invoiceId) {
-    const existingInvoice = await Invoice.findOne({ reservation: reservationId });
-    if (existingInvoice) lockKey = existingInvoice._id;
-  }
+  const linkedReservation = invoiceId && !reservationId ? (await Invoice.findById(invoiceId).select("reservation").lean())?.reservation : null;
+  const lockKey = reservationId || linkedReservation || invoiceId || bookingId;
 
   return await withRoomLock(lockKey, async () => {
     // Idempotency check inside the lock also covers simultaneous retries.
@@ -451,6 +451,7 @@ async function getReservationPayments(reservationId) {
 module.exports = {
   normalizePaymentMethod,
   getReservationFinancials,
+  getInvoicePaidAmount,
   recordPayment,
   getReservationPayments
 };

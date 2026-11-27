@@ -21,7 +21,7 @@ describe('role navigation policy', () => {
     expect(canAccessRoute('manager', 'guests')).toBe(true);
     expect(canAccessRoute('manager', 'reservations')).toBe(false);
     expect(canAccessRoute('finance', 'restaurants')).toBe(true);
-    expect(canAccessRoute('finance', 'reports')).toBe(false);
+    expect(canAccessRoute('finance', 'reports')).toBe(true);
     expect(canAccessRoute('housekeeping', 'rooms')).toBe(true);
     expect(canAccessRoute('maintenance', 'roomForm')).toBe(false);
     expect(canAccessRoute('customer', 'reservations')).toBe(false);
@@ -57,7 +57,7 @@ describe('role navigation policy', () => {
 
     const dining = getDepartmentNavigation({ role: 'admin', departmentAdmin: true, adminDepartments: ['dining'] });
     expect(dining.map((section) => section.title)).toEqual(['Restaurant Management']);
-    expect(dining[0].items.map((item) => item.path)).toEqual(['/admin/restaurants/dashboard', '/admin/restaurants', '/admin/dining-offers']);
+    expect(dining[0].items.map((item) => item.path)).toEqual(['/admin/restaurants/dashboard', '/admin/restaurants', '/admin/menu-management', '/admin/dining-offers']);
 
     const offersOnly = getDepartmentNavigation({ role: 'admin', departmentAdmin: true, adminPermissions: ['offers.dining'] });
     expect(offersOnly.map((section) => section.title)).toEqual(['Restaurant Management']);

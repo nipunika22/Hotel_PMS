@@ -14,6 +14,7 @@ const rateLimitBuckets = new Map();
  * @param {string} options.message - Error message on limit exceed
  */
 function createRateLimiter(options = {}) {
+  const namespace = options.namespace || "concierge";
   const windowMs = options.windowMs || 60 * 1000;
   const max = options.max || 25;
   const message = options.message || "Too many concierge requests. Please wait a moment before trying again.";
@@ -22,6 +23,7 @@ function createRateLimiter(options = {}) {
   const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [key, timestamps] of rateLimitBuckets.entries()) {
+      if (!key.startsWith(`${namespace}:`)) continue;
       const valid = timestamps.filter(t => now - t < windowMs);
       if (valid.length === 0) {
         rateLimitBuckets.delete(key);
@@ -39,10 +41,11 @@ function createRateLimiter(options = {}) {
   return function rateLimiter(req, res, next) {
     const now = Date.now();
     // Identifier prioritizes authenticated user ID, fallback to client IP
-    const clientKey = (req.user && req.user._id)
+    const identity = (req.user && req.user._id)
       ? `user:${req.user._id.toString()}`
       : `ip:${req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown"}`;
 
+    const clientKey = `${namespace}:${identity}`;
     const timestamps = rateLimitBuckets.get(clientKey) || [];
     const windowStart = now - windowMs;
     const recentRequests = timestamps.filter(t => t > windowStart);

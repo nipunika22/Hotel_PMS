@@ -22,7 +22,8 @@ const restaurantSchema = new mongoose.Schema({
   tagline: {
     type: String,
     trim: true,
-    default: ""
+    default: "",
+    maxlength: 160
   },
   description: {
     type: String,
@@ -155,6 +156,11 @@ const restaurantSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     index: true
+  },
+  reservationAllocationVersion: {
+    type: Number,
+    default: 0,
+    select: false
   },
   featured: {
     type: Boolean,

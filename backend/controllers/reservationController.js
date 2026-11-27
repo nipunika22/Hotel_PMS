@@ -4,9 +4,10 @@ const Reservation = require("../models/Reservation");
 const Guest = require("../models/Guest");
 const Room = require("../models/Room");
 const TravelAgent = require("../models/TravelAgent");
-const { assertAvailable } = require("../services/availabilityService");
+const { assertAvailable, findCheckedInLegacyBooking } = require("../services/availabilityService");
 const { calculateCharges, assertTransition, generateReservationNumber } = require("../services/reservationService");
 const { withRoomLock, runWithOptionalTransaction } = require("../utils/transactionHelper");
+const { getInvoicePaidAmount } = require("../services/paymentService");
 const { createCheckoutTask } = require("../services/housekeepingService");
 const { buildPropertyFilter, getActivePropertyId } = require("../middleware/propertyContext");
 const notificationService = require("../services/notificationService");
@@ -336,6 +337,9 @@ exports.updateReservation = async (req, res) => {
       if (!guest) return res.status(400).json({ error: "Select a guest in the assigned property" });
     }
 
+    if (["Checked-In", "Checked-Out"].includes(updates.status)) {
+      return res.status(409).json({ error: "Use the check-in or checkout action to update a stay." });
+    }
     if (updates.status) {
       assertTransition(reservation.status, updates.status);
     }
@@ -385,34 +389,40 @@ exports.checkIn = async (req, res) => {
     }
     assertTransition(reservation.status, "Checked-In");
 
-    // Assign room if not already assigned
-    if (!reservation.room && roomId) {
-      const room = await Room.findOne(buildPropertyFilter(req, { _id: roomId }));
-      if (!room) {
-        return res.status(404).json({ error: "Room not found" });
-      }
-
-      if (room.status !== "Available" && room.status !== "Reserved") {
-        return res.status(400).json({ error: "Room is not available" });
-      }
-
-      reservation.room = roomId;
-    }
-
-    if (!reservation.room) {
+    const targetRoomId = reservation.room || roomId;
+    if (!targetRoomId) {
       return res.status(400).json({ error: "Please assign a room before check-in" });
     }
 
-    reservation.status = "Checked-In";
-    reservation.actualCheckInDate = actualCheckInDate || new Date();
-    await reservation.save();
+    await withRoomLock(targetRoomId, () => runWithOptionalTransaction(async (session) => {
+      const current = await Reservation.findOne(buildPropertyFilter(req, { _id: id })).session(session);
+      assertTransition(current.status, "Checked-In");
+      if (current.room && !current.room.equals(targetRoomId)) {
+        throw Object.assign(new Error("Room assignment changed. Retry check-in."), { statusCode: 409 });
+      }
 
-    // Update room status
-    await Room.findOneAndUpdate(buildPropertyFilter(req, { _id: reservation.room }), {
-      status: "Occupied",
-      currentReservation: reservation._id,
-      cleaningStatus: "Dirty"
-    });
+      const room = await Room.findOne(buildPropertyFilter(req, { _id: targetRoomId })).session(session);
+      if (!room) throw Object.assign(new Error("Room not found"), { statusCode: 404 });
+      if (!room.isActive || !["Available", "Reserved"].includes(room.status) ||
+          ["Dirty", "Pickup"].includes(room.cleaningStatus)) {
+        throw Object.assign(new Error("Room is unavailable for check-in."), { statusCode: 409 });
+      }
+      const checkedIn = await Reservation.exists({ room: room._id, status: "Checked-In" }).session(session);
+      if (checkedIn || await findCheckedInLegacyBooking(room._id, session)) {
+        throw Object.assign(new Error("Room is already occupied."), { statusCode: 409 });
+      }
+
+      // Save the room first so a concurrent housekeeping operation cannot release an occupied room.
+      room.status = "Occupied";
+      room.currentReservation = current._id;
+      room.cleaningStatus = "Dirty";
+      await room.save({ session });
+
+      current.room = room._id;
+      current.status = "Checked-In";
+      current.actualCheckInDate = actualCheckInDate || new Date();
+      await current.save({ session });
+    }));
 
     const updatedReservation = await Reservation.findOne(buildPropertyFilter(req, { _id: id }))
       .populate("guest")
@@ -455,19 +465,30 @@ exports.checkOut = async (req, res) => {
       return res.status(404).json({ error: "Reservation not found" });
     }
 
+    const Invoice = require("../models/Invoice");
+    // The reservation was already property-scoped. Legacy invoices can inherit its property.
+    const invoiceFilter = { reservation: reservation._id };
+    if (req.propertyId) invoiceFilter.property = { $in: [req.propertyId, null] };
+    const findInvoice = (session = null) => Invoice.findOne(invoiceFilter).sort({ createdAt: 1, _id: 1 }).session(session);
+
+    if (reservation.status === "Checked-Out") {
+      return res.json({ reservation, invoice: await findInvoice(), alreadyCheckedOut: true });
+    }
     if (reservation.status !== "Checked-In") {
       return res.status(400).json({ error: "Guest is not checked in" });
     }
     assertTransition(reservation.status, "Checked-Out");
 
-    // Check if invoice exists and is fully paid
-    const Invoice = require("../models/Invoice");
-    let invoice = await Invoice.findOne(buildPropertyFilter(req, { reservation: id }));
-    
-    if (!invoice) {
+    const invoice = await withRoomLock(`checkout-invoice:${id}`, () => runWithOptionalTransaction(async (session) => {
+      const existing = await findInvoice(session);
+      if (existing) return existing;
+
+      // Coordinate invoice creation with restaurant folio posting on the same stay.
+      await Reservation.updateOne({ _id: reservation._id }, { $inc: { __v: 1 } }, { session });
+
       // Auto-generate invoice
       const GuestExpense = require("../models/GuestExpense");
-      const expenses = await GuestExpense.find({ reservation: id });
+      const expenses = await GuestExpense.find({ reservation: id }).session(session);
       
       const totalExtraExpenses = expenses.reduce((sum, exp) => sum + exp.totalAmount, 0);
       const subtotal = reservation.roomCharges + totalExtraExpenses;
@@ -479,10 +500,11 @@ exports.checkOut = async (req, res) => {
       const yearMonth = now.getFullYear().toString().slice(-2) + (now.getMonth() + 1).toString().padStart(2, '0');
       const count = await Invoice.countDocuments({
         invoiceNumber: new RegExp(`^INV${yearMonth}`)
-      });
+      }).session(session);
       const invoiceNumber = `INV${yearMonth}${(count + 1).toString().padStart(5, '0')}`;
 
-      invoice = new Invoice({
+      const invoice = new Invoice({
+        property: reservation.property || req.propertyId,
         invoiceNumber,
         reservation: reservation._id,
         guest: reservation.guest._id,
@@ -514,41 +536,11 @@ exports.checkOut = async (req, res) => {
         generatedBy: req.user.id
       });
 
-      await invoice.save();
-    }
+      return invoice.save({ session });
+    }));
 
-    // Check if invoice is fully paid
-    const Payment = require("../models/Payment");
-    const canonicalInvoicePayments = await Payment.aggregate([
-      {
-        $match: {
-          invoice: invoice._id,
-          paymentStatus: { $in: ["completed", "partially_refunded"] }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          paid: {
-            $sum: {
-              $subtract: [
-                { $ifNull: ["$amount", 0] },
-                { $ifNull: ["$refundAmount", 0] }
-              ]
-            }
-          }
-        }
-      }
-    ]);
-    const canonicalPaid = Math.max(0, Number(canonicalInvoicePayments[0]?.paid || 0));
-    const latestBalanceDue = Math.max(
-      0,
-      Number(invoice.totalAmount || 0) -
-      Math.max(
-        Number(invoice.totalPaid ?? invoice.advancePaid ?? 0),
-        canonicalPaid
-      )
-    );
+    const paid = await getInvoicePaidAmount(invoice);
+    const latestBalanceDue = Math.max(0, Number(invoice.totalAmount || 0) - paid);
     if (latestBalanceDue > 0) {
       return res.status(400).json({ 
         error: "Cannot check out. Outstanding balance of LKR " + latestBalanceDue.toLocaleString() + " must be paid first.",
@@ -557,21 +549,26 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    // If paid, proceed with checkout
-    reservation.status = "Checked-Out";
-    reservation.actualCheckOutDate = actualCheckOutDate || new Date();
-    await reservation.save();
-
-    // Update room status and automatically trigger housekeeping workflow
-    if (reservation.room) {
-      const targetRoomId = reservation.room._id || reservation.room;
-      await Room.findOneAndUpdate(buildPropertyFilter(req, { _id: targetRoomId }), {
-        status: "Cleaning",
-        currentReservation: null,
-        cleaningStatus: "Dirty"
-      });
-      await createCheckoutTask(targetRoomId, reservation._id, req.user.id);
-    }
+    // Save checkout and its housekeeping handoff in the same room operation.
+    const finishCheckout = async (session) => {
+      const current = await Reservation.findOne(buildPropertyFilter(req, { _id: id })).session(session);
+      if (current?.status === "Checked-Out") return false;
+      if (!current) throw Object.assign(new Error("Reservation not found"), { statusCode: 404 });
+      if (String(current.room) !== String(reservation.room?._id || reservation.room)) {
+        throw Object.assign(new Error("Room assignment changed. Retry checkout."), { statusCode: 409 });
+      }
+      assertTransition(current.status, "Checked-Out");
+      current.status = "Checked-Out";
+      current.actualCheckOutDate = actualCheckOutDate || new Date();
+      await current.save({ session });
+      if (current.room) {
+        await createCheckoutTask(current.room, current._id, req.user.id, session, { roomLocked: true });
+      }
+      return true;
+    };
+    const checkedOut = reservation.room
+      ? await withRoomLock(reservation.room._id || reservation.room, () => runWithOptionalTransaction(finishCheckout))
+      : await runWithOptionalTransaction(finishCheckout);
 
     const updatedReservation = await Reservation.findOne(buildPropertyFilter(req, { _id: id }))
       .populate("guest")
@@ -580,7 +577,7 @@ exports.checkOut = async (req, res) => {
 
     // Notify guest on check-out
     try {
-      if (updatedReservation?.guest?.user) {
+      if (checkedOut && updatedReservation?.guest?.user) {
         notificationService.createNotification({
           recipient: updatedReservation.guest.user,
           title: "Check-Out Complete",
@@ -595,11 +592,12 @@ exports.checkOut = async (req, res) => {
 
     res.json({ 
       reservation: updatedReservation,
-      invoice: invoice
+      invoice,
+      alreadyCheckedOut: !checkedOut
     });
   } catch (err) {
     console.error("Checkout error:", err);
-    res.status(500).json({ error: "Failed to check out guest" });
+    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to check out guest" });
   }
 };
 
@@ -625,7 +623,10 @@ exports.cancelReservation = async (req, res) => {
 
     // Update room status if room was assigned
     if (reservation.room) {
-      await Room.findOneAndUpdate(buildPropertyFilter(req, { _id: reservation.room }), {
+      await Room.findOneAndUpdate(buildPropertyFilter(req, {
+        _id: reservation.room, status: "Reserved",
+        currentReservation: { $in: [reservation._id, null] }
+      }), {
         status: "Available",
         currentReservation: null
       });
@@ -652,7 +653,10 @@ exports.markNoShow = async (req, res) => {
     reservation.cancellationDate = new Date();
     await reservation.save();
     if (reservation.room) {
-      await Room.findOneAndUpdate(buildPropertyFilter(req, { _id: reservation.room }), { status: "Available", currentReservation: null });
+      await Room.findOneAndUpdate(buildPropertyFilter(req, {
+        _id: reservation.room, status: "Reserved",
+        currentReservation: { $in: [reservation._id, null] }
+      }), { status: "Available", currentReservation: null });
     }
     res.json(reservation);
   } catch (err) {

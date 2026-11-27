@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const Room = require("../models/Room");
 const Reservation = require("../models/Reservation");
 const Booking = require("../models/Booking");
-const { getAvailableRoomIds, parseStayDates } = require("../services/availabilityService");
+const HousekeepingTask = require("../models/HousekeepingTask");
+const { CLEANING_QUEUE_STATUSES, assertVacant, queueCleaningTask, loadCurrentCleaningTasks } = require("../services/housekeepingService");
+const { withRoomLock, runWithOptionalTransaction } = require("../utils/transactionHelper");
+const { getUnavailableRoomIds, parseStayDates } = require("../services/availabilityService");
 const { getActivePropertyId, buildPropertyFilter } = require("../middleware/propertyContext");
 
 // Get all rooms
@@ -15,26 +18,11 @@ exports.getRooms = async (req, res) => {
       .sort({ roomNumber: 1 })
       .lean();
 
-    // Attach active housekeeping tasks if any
-    const HousekeepingTask = require("../models/HousekeepingTask");
-    const activeTasks = await HousekeepingTask.find({
-      status: { $in: ["Pending", "Assigned", "In Progress", "Needs Recleaning", "Completed"] }
-    })
-      .populate("assignedTo", "name email role phone")
-      .lean();
-
-    const taskByRoomId = new Map();
-    for (const t of activeTasks) {
-      if (t.room) taskByRoomId.set(t.room.toString(), t);
-    }
-
-    const enrichedRooms = rooms.map(room => {
-      const activeTask = taskByRoomId.get(room._id.toString()) || null;
-      return {
-        ...room,
-        activeCleaningTask: activeTask
-      };
-    });
+    const current = await loadCurrentCleaningTasks(rooms, null, true);
+    const enrichedRooms = rooms.map(room => ({
+      ...room,
+      activeCleaningTask: current.get(String(room._id)) || null
+    }));
 
     res.json(enrichedRooms);
   } catch (err) {
@@ -66,11 +54,15 @@ exports.getAvailableRooms = async (req, res) => {
   const { checkInDate, checkOutDate, roomType } = req.query;
 
   try {
-    // If no dates provided, return all active rooms currently available for guests
-    if (!checkInDate || !checkOutDate) {
+    const dates = checkInDate && checkOutDate ? parseStayDates(checkInDate, checkOutDate) : null;
+    const unavailableRoomIds = await getUnavailableRoomIds(dates?.checkIn, dates?.checkOut, req.propertyId);
+
+    // If no dates provided, return all active rooms currently available for guests.
+    if (!dates) {
       const query = buildPropertyFilter(req, {
+        _id: { $nin: unavailableRoomIds },
         status: "Available",
-        cleaningStatus: { $ne: "Dirty" },
+        cleaningStatus: { $nin: ["Dirty", "Pickup"] },
         isActive: true
       });
       if (roomType) {
@@ -84,13 +76,10 @@ exports.getAvailableRooms = async (req, res) => {
       return res.json(availableRooms);
     }
 
-    const { checkIn, checkOut } = parseStayDates(checkInDate, checkOutDate);
-    const allBookedRoomIds = await getAvailableRoomIds(checkIn, checkOut, req.propertyId);
-
     const query = buildPropertyFilter(req, {
-      _id: { $nin: allBookedRoomIds },
+      _id: { $nin: unavailableRoomIds },
       status: { $nin: ["Maintenance", "Out of Order", "Occupied", "Cleaning"] },
-      cleaningStatus: { $ne: "Dirty" },
+      cleaningStatus: { $nin: ["Dirty", "Pickup"] },
       isActive: true
     });
 
@@ -233,54 +222,65 @@ exports.updateRoomStatus = async (req, res) => {
   }
 
   try {
-    if (status === "Maintenance" || status === "Out of Order") {
-      const { assertRoomBlockable } = require("../services/maintenanceService");
-      await assertRoomBlockable(id);
-    }
+    const room = await withRoomLock(id, () => runWithOptionalTransaction(async (session) => {
+      const currentRoom = await Room.findOne(buildPropertyFilter(req, { _id: id })).session(session);
+      if (!currentRoom) throw Object.assign(new Error("Room not found"), { statusCode: 404 });
 
-    if (status === "Available") {
-      const checkedInStay = await Reservation.findOne({
-        room: id,
-        status: "Checked-In"
-      });
-      if (checkedInStay) {
-        const err = new Error("Cannot set room to Available while an active Checked-In reservation exists");
-        err.statusCode = 409;
-        throw err;
+      if (["Maintenance", "Out of Order"].includes(status)) {
+        const { assertRoomBlockable } = require("../services/maintenanceService");
+        await assertRoomBlockable(id);
       }
 
-      const HousekeepingTask = require("../models/HousekeepingTask");
-      const activeCleaningTask = await HousekeepingTask.findOne({
-        room: id,
-        status: { $in: ["Pending", "Assigned", "In Progress", "Needs Recleaning"] }
-      });
-      if (activeCleaningTask && cleaningStatus !== "Clean") {
-        const err = new Error("Cannot set room to Available while a housekeeping cleaning task is pending or in progress. Please complete cleaning through the Housekeeping module.");
-        err.statusCode = 409;
-        throw err;
+      const nextStatus = status || currentRoom.status;
+      const mayRelease = ["Available", "Reserved"].includes(nextStatus);
+      if (mayRelease && (status || ["Clean", "Inspected"].includes(cleaningStatus))) {
+        await assertVacant(currentRoom, session);
+        const task = await HousekeepingTask.exists({
+          room: id, status: { $in: CLEANING_QUEUE_STATUSES }
+        }).session(session);
+        if (task || ["Cleaning", "Maintenance", "Out of Order"].includes(currentRoom.status) ||
+            ["Dirty", "Pickup"].includes(currentRoom.cleaningStatus)) {
+          throw Object.assign(new Error("Use Housekeeping to complete cleaning and approve the room."), { statusCode: 409 });
+        }
       }
-    }
 
-    const updates = {};
-    
-    if (status) updates.status = status;
-    if (cleaningStatus) {
-      updates.cleaningStatus = cleaningStatus;
-      if (cleaningStatus === "Clean") {
-        updates.lastCleanedAt = new Date();
+      const changesHygiene = cleaningStatus && cleaningStatus !== currentRoom.cleaningStatus;
+      if (changesHygiene && (currentRoom.status === "Cleaning" ||
+          (["Dirty", "Pickup"].includes(currentRoom.cleaningStatus) && ["Clean", "Inspected"].includes(cleaningStatus)))) {
+        throw Object.assign(new Error("Update room hygiene through its housekeeping task."), { statusCode: 409 });
       }
-    }
-    if (maintenanceNotes) updates.maintenanceNotes = maintenanceNotes;
-    if (status === "Maintenance") updates.lastMaintenanceAt = new Date();
+      if (currentRoom.status === "Occupied" && status && status !== "Occupied") {
+        await assertVacant(currentRoom, session);
+      }
+      if (status === "Cleaning" && ["Maintenance", "Out of Order"].includes(currentRoom.status)) {
+        throw Object.assign(new Error("Release the room through Maintenance first."), { statusCode: 409 });
+      }
 
-    const room = await Room.findOneAndUpdate(buildPropertyFilter(req, { _id: id }), updates, {
-      new: true,
-      runValidators: true
-    });
+      const needsCleaning = (status === "Cleaning" && currentRoom.status !== "Cleaning") ||
+        (["Dirty", "Pickup"].includes(cleaningStatus) && ["Available", "Reserved", "Cleaning"].includes(nextStatus));
+      if (needsCleaning) {
+        await assertVacant(currentRoom, session);
+        if (!currentRoom.isActive) throw Object.assign(new Error("Room is inactive."), { statusCode: 409 });
+      }
 
-    if (!room) {
-      return res.status(404).json({ error: "Room not found" });
-    }
+      if (status) currentRoom.status = status;
+      if (cleaningStatus) {
+        currentRoom.cleaningStatus = cleaningStatus;
+        if (cleaningStatus === "Clean") currentRoom.lastCleanedAt = new Date();
+      }
+      if (maintenanceNotes) currentRoom.maintenanceNotes = maintenanceNotes;
+      if (status === "Maintenance") currentRoom.lastMaintenanceAt = new Date();
+
+      if (needsCleaning) {
+        currentRoom.status = "Cleaning";
+        currentRoom.cleaningStatus = "Dirty";
+        const { created } = await queueCleaningTask(currentRoom, {
+          taskType: "Daily Cleaning", userId: req.user.id
+        }, session);
+        if (created) return currentRoom;
+      }
+      return currentRoom.save({ session });
+    }));
 
     res.json(room);
   } catch (err) {

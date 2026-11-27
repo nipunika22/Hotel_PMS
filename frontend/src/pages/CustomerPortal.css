@@ -503,6 +503,21 @@
   }
 }
 
+@media (max-width: 768px) {
+  .my-bookings-dining-card {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: .9rem !important;
+    padding: .9rem !important;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .my-bookings-dining-image { height: 150px !important; min-width: 0; }
+  .my-bookings-dining-card > div { min-width: 0; overflow-wrap: anywhere; }
+  .my-bookings-dining-card > div:last-child { min-width: 0 !important; text-align: left !important; }
+  .my-bookings-dining-card button,
+  .my-bookings-dining-card a { max-width: 100%; white-space: normal; }
+}
+
 /* ============================================================
    Section Headers
    ============================================================ */

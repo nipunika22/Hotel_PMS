@@ -124,6 +124,13 @@ const restaurantReservationSchema = new mongoose.Schema({
     enum: ["PENDING", "CONFIRMED", "SEATED", "COMPLETED", "CANCELLED", "NO_SHOW"],
     default: "CONFIRMED"
   },
+  arrivalStatus: { type: String, enum: ["EXPECTED", "ARRIVED", "NO_SHOW"], default: "EXPECTED" },
+  guestManagementTokenHash: { type: String, select: false },
+  paymentReconciliationRequired: { type: Boolean, default: false },
+  arrivedAt: Date,
+  arrivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  seatedAt: Date,
+  seatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   cancellationReason: {
     type: String,
     trim: true,

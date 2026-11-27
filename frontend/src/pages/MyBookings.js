@@ -124,7 +124,7 @@ const MyBookings = () => {
 
     try {
       setCancellingBookingId(reservation._id);
-      await restaurantAPI.cancelReservation(ref, { reason: 'Cancelled by guest from customer portal' });
+      await restaurantAPI.cancelReservation(ref, { reason: 'Cancelled by guest from customer portal', propertyId: reservation.property });
       toast.success('Your table reservation has been cancelled');
       fetchBookings();
       if (selectedDiningDetails?._id === reservation._id) {
@@ -413,12 +413,13 @@ const MyBookings = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {diningReservations.map((dr) => {
-              const isCancellable = (dr.status === 'CONFIRMED' || dr.status === 'PENDING');
+              const isCancellable = dr.arrivalStatus !== 'ARRIVED' && ['CONFIRMED', 'PENDING'].includes(dr.status);
               const restImage = dr.restaurant?.heroImage || null;
               
               return (
                 <div 
                   key={dr._id} 
+                  className="my-bookings-dining-card"
                   style={{ 
                     background: '#FFFFFF', 
                     borderRadius: '1rem', 
@@ -432,7 +433,7 @@ const MyBookings = () => {
                   }}
                 >
                   {/* Restaurant Image or Fallback */}
-                  <div style={{ height: '170px', borderRadius: '0.75rem', overflow: 'hidden', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="my-bookings-dining-image" style={{ height: '170px', borderRadius: '0.75rem', overflow: 'hidden', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {restImage ? (
                       <img 
                         src={restImage} 
@@ -549,13 +550,17 @@ const MyBookings = () => {
                         <span>Add to Cal</span>
                       </button>
 
-                      {dr.totalAmount > 0 && dr.status !== 'CANCELLED' && (
+                      {dr.outstandingBalance != null && <div>Payment: {dr.paymentStatus} · {dr.savedReservationCurrency} {dr.outstandingBalance.toLocaleString()} due</div>}
+                      {dr.paymentReconciliationRequired && <div>Payment under review</div>}
+                      {dr.outstandingBalance > 0 && !dr.billedToFolio && !dr.paymentReconciliationRequired &&
+                       ['PENDING', 'CONFIRMED', 'SEATED'].includes(dr.status) && (
                         <button
                           type="button"
                           className="btn btn-sm"
                           style={{ background: 'var(--c-brass, #B68C48)', color: '#FFFFFF', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', border: 'none', padding: '0.45rem 0.65rem', borderRadius: '0.375rem', fontWeight: 600 }}
                           onClick={() => setPaymentModalData({
                             purpose: 'restaurant_dining',
+                            propertyId: dr.property,
                             targetId: dr._id,
                             itemSummary: {
                               title: `Table at ${dr.restaurant?.name || 'Restaurant'}`,
@@ -1032,7 +1037,7 @@ const MyBookings = () => {
                     <FaUtensils /> View Restaurant Menu
                   </Link>
                 )}
-                {(selectedDiningDetails.status === 'CONFIRMED' || selectedDiningDetails.status === 'PENDING') && (
+                {(selectedDiningDetails.arrivalStatus !== 'ARRIVED' && ['CONFIRMED', 'PENDING'].includes(selectedDiningDetails.status)) && (
                   <button
                     type="button"
                     className="btn btn-danger"
@@ -1065,6 +1070,7 @@ const MyBookings = () => {
           onClose={() => setPaymentModalData(null)}
           purpose={paymentModalData.purpose}
           targetId={paymentModalData.targetId}
+          propertyId={paymentModalData.propertyId}
           itemSummary={paymentModalData.itemSummary}
           onPaymentSuccess={() => {
             fetchBookings();

@@ -4,6 +4,7 @@ import { FaBed, FaCalendarCheck, FaUtensils, FaTag, FaGlassCheers, FaPlus, FaArr
 import { roomAPI, reservationAPI, restaurantAPI, eventAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getDepartmentNavigation } from '../config/roleAccess';
+import { RestaurantSelection } from './RestaurantOperations';
 import './ManagementDashboards.css';
 
 const displayValue = (value) => value == null ? 'Unavailable' : Number(value).toLocaleString();
@@ -69,7 +70,8 @@ export function RestaurantManagementDashboard() {
   const recent = [...(data.offers || [])].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)).slice(0, 5).map((offer) => ({ ...offer, id: offer._id }));
   return <DashboardFrame title="Restaurant Management Dashboard" subtitle="Restaurant operations and persisted dining offers." icon={FaUtensils} loading={state.loading} error={state.error} onRefresh={state.reload} cards={[
     { label: 'Total Restaurants', value: data.stats?.totalRestaurants ?? data.restaurants?.length }, { label: 'Active Restaurants', value: activeRestaurants }, { label: 'Total Dining Offers', value: data.offers?.length }, { label: 'Active Dining Offers', value: activeOffers?.length }, { label: 'Offers Expiring in 30 Days', value: expiring }, { label: 'Today’s Dining Bookings', value: data.stats?.todayReservationsCount }
-  ]} links={[{ to: '/admin/restaurants', label: 'Manage Restaurants', icon: <FaUtensils /> }, { to: '/admin/restaurants#restaurant-records', label: 'Add Restaurant', icon: <FaPlus /> }, { to: '/admin/dining-offers', label: 'Manage Dining Offers', icon: <FaTag /> }]}>
+  ]} links={[{ to: '/admin/restaurants', label: 'Manage Restaurants', icon: <FaUtensils /> }, { to: '/admin/menu-management', label: 'Menu Management', icon: <FaUtensils /> }, { to: '/admin/restaurants#restaurant-records', label: 'Add Restaurant', icon: <FaPlus /> }, { to: '/admin/dining-offers', label: 'Manage Dining Offers', icon: <FaTag /> }]}>
+    <RestaurantSelection key={state.loading ? "loading" : "loaded"} />
     <RecentTable title="Recently updated dining offers" columns={[{ label: 'Offer', value: (offer) => offer.title }, { label: 'Restaurant', value: (offer) => offer.restaurant?.name || '—' }, { label: 'Status', value: (offer) => offer.active ? 'Active' : 'Inactive' }, { label: 'Valid until', value: (offer) => offer.validUntil ? new Date(offer.validUntil).toLocaleDateString() : 'Ongoing' }]} rows={recent} empty="No persisted dining offers are available." />
   </DashboardFrame>;
 }

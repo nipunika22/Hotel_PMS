@@ -17,31 +17,42 @@ function parseStayDates(checkInDate, checkOutDate) {
   return { checkIn, checkOut, nights: Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24)) };
 }
 
-async function findConflict(roomId, checkIn, checkOut, excludeReservationId, session = null) {
-  const reservationQuery = {
-    room: roomId,
-    status: { $in: ACTIVE_RESERVATION_STATUSES },
-    checkInDate: { $lt: checkOut },
-    checkOutDate: { $gt: checkIn }
+function stayConflict(statusField, checkedInStatus, activeStatuses, checkIn, checkOut) {
+  if (!checkIn || !checkOut) return { [statusField]: checkedInStatus };
+  return {
+    $or: [
+      { [statusField]: checkedInStatus },
+      {
+        [statusField]: { $in: activeStatuses },
+        checkInDate: { $lt: checkOut },
+        checkOutDate: { $gt: checkIn }
+      }
+    ]
   };
+}
+
+function reservationConflict(checkIn, checkOut) {
+  return stayConflict("status", "Checked-In", ACTIVE_RESERVATION_STATUSES, checkIn, checkOut);
+}
+
+function legacyBookingConflict(checkIn, checkOut) {
+  // Bookings with a canonical reservation are already covered by the reservation query.
+  return {
+    reservation: null,
+    ...stayConflict("bookingStatus", "checked-in", ACTIVE_BOOKING_STATUSES, checkIn, checkOut)
+  };
+}
+
+function findCheckedInLegacyBooking(roomId, session) {
+  return Booking.exists({ room: roomId, ...legacyBookingConflict() }).session(session);
+}
+
+async function findConflict(roomId, checkIn, checkOut, excludeReservationId, session) {
+  const reservationQuery = { room: roomId, ...reservationConflict(checkIn, checkOut) };
   if (excludeReservationId) reservationQuery._id = { $ne: excludeReservationId };
 
-  let resQuery = Reservation.findOne(reservationQuery);
-  if (session) resQuery = resQuery.session(session);
-  const reservation = await resQuery.lean();
-  if (reservation) return reservation;
-
-  // Booking is a temporary compatibility record. Only records without a canonical
-  // reservation are considered, preventing customer bookings from being double-counted.
-  let bookQuery = Booking.findOne({
-    room: roomId,
-    reservation: { $exists: false },
-    bookingStatus: { $in: ACTIVE_BOOKING_STATUSES },
-    checkInDate: { $lt: checkOut },
-    checkOutDate: { $gt: checkIn }
-  });
-  if (session) bookQuery = bookQuery.session(session);
-  return bookQuery.lean();
+  const reservation = await Reservation.exists(reservationQuery).session(session);
+  return reservation || Booking.exists({ room: roomId, ...legacyBookingConflict(checkIn, checkOut) }).session(session);
 }
 
 async function assertAvailable({ room, roomId, checkInDate, checkOutDate, excludeReservationId }, session = null) {
@@ -51,8 +62,8 @@ async function assertAvailable({ room, roomId, checkInDate, checkOutDate, exclud
     error.statusCode = 404;
     throw error;
   }
-  const UNAVAILABLE_STATUSES = ["Maintenance", "Out of Order", "Cleaning"];
-  if (!room.isActive || UNAVAILABLE_STATUSES.includes(room.status) || room.cleaningStatus === "Dirty") {
+  const UNAVAILABLE_STATUSES = ["Maintenance", "Out of Order", "Occupied", "Cleaning"];
+  if (!room.isActive || UNAVAILABLE_STATUSES.includes(room.status) || ["Dirty", "Pickup"].includes(room.cleaningStatus)) {
     const error = new Error("Room is not available for booking");
     error.statusCode = 409;
     throw error;
@@ -67,28 +78,13 @@ async function assertAvailable({ room, roomId, checkInDate, checkOutDate, exclud
   return dates;
 }
 
-async function getAvailableRoomIds(checkInDate, checkOutDate, propertyId = null) {
-  const dates = parseStayDates(checkInDate, checkOutDate);
-  const resQuery = {
-    status: { $in: ACTIVE_RESERVATION_STATUSES },
-    checkInDate: { $lt: dates.checkOut },
-    checkOutDate: { $gt: dates.checkIn }
-  };
-  const bookQuery = {
-    reservation: { $exists: false },
-    bookingStatus: { $in: ACTIVE_BOOKING_STATUSES },
-    checkInDate: { $lt: dates.checkOut },
-    checkOutDate: { $gt: dates.checkIn }
-  };
-  if (propertyId) {
-    resQuery.property = propertyId;
-    bookQuery.property = propertyId;
-  }
-  const [reservations, bookings] = await Promise.all([
-    Reservation.find(resQuery).select("room").lean(),
-    Booking.find(bookQuery).select("room").lean()
+async function getUnavailableRoomIds(checkIn, checkOut, propertyId = null) {
+  const scope = propertyId ? { property: { $in: [propertyId, null] } } : {};
+  const [reservationRooms, bookingRooms] = await Promise.all([
+    Reservation.distinct("room", { ...scope, ...reservationConflict(checkIn, checkOut) }),
+    Booking.distinct("room", { ...scope, ...legacyBookingConflict(checkIn, checkOut) })
   ]);
-  return [...new Set([...reservations, ...bookings].filter(item => item.room).map(item => item.room.toString()))];
+  return [...new Set([...reservationRooms, ...bookingRooms].filter(Boolean).map(String))];
 }
 
-module.exports = { ACTIVE_RESERVATION_STATUSES, parseStayDates, assertAvailable, getAvailableRoomIds };
+module.exports = { ACTIVE_RESERVATION_STATUSES, parseStayDates, assertAvailable, getUnavailableRoomIds, findCheckedInLegacyBooking };

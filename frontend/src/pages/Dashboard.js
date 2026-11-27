@@ -65,15 +65,14 @@ const Dashboard = () => {
       ...item,
       section: section.title
     })));
-    return <div className="content-wrapper" style={{ padding: '2rem' }}>
-      <h1>Department Dashboard</h1>
-      <p>Access is limited to the hotel departments assigned to your account.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '1rem', marginTop: '1.5rem' }}>
-        {links.map((item) => <Link key={item.path} to={item.path} style={{ display: 'block', padding: '1.25rem', border: '1px solid #dce4df', borderRadius: 10, color: '#203a35', background: '#fff', textDecoration: 'none' }}><strong>{item.label}</strong><p style={{ margin: '8px 0 0', color: '#68766f' }}>{item.section}</p></Link>)}
-        <Link to="/staff-attendance" style={{ display: 'block', padding: '1.25rem', border: '1px solid #dce4df', borderRadius: 10, color: '#203a35', background: '#fff', textDecoration: 'none' }}><strong>My Attendance</strong><p style={{ margin: '8px 0 0', color: '#68766f' }}>Check in, check out, and view your history</p></Link>
-        <Link to="/profile" style={{ display: 'block', padding: '1.25rem', border: '1px solid #dce4df', borderRadius: 10, color: '#203a35', background: '#fff', textDecoration: 'none' }}><strong>My Profile</strong><p style={{ margin: '8px 0 0', color: '#68766f' }}>View your account and update your password</p></Link>
+    return <div className="content-wrapper admin-dashboard department-dashboard">
+      <header className="admin-dashboard-heading"><div><span className="admin-eyebrow">TEAM WORKSPACE</span><h1>Department Dashboard</h1><p>Quick access to the hotel departments assigned to your account.</p></div></header>
+      <div className="department-dashboard-grid">
+        {links.map((item) => <Link key={item.path} to={item.path} className="department-dashboard-link"><strong>{item.label}</strong><span>{item.section}</span><FaArrowRight aria-hidden="true" /></Link>)}
+        <Link to="/staff-attendance" className="department-dashboard-link"><strong>My Attendance</strong><span>Check in, check out, and view your history</span><FaArrowRight aria-hidden="true" /></Link>
+        <Link to="/profile" className="department-dashboard-link"><strong>My Profile</strong><span>View your account and update your password</span><FaArrowRight aria-hidden="true" /></Link>
       </div>
-      {!links.length && <p>Your administrator account has no active department assignments. Contact the Super Admin.</p>}
+      {!links.length && <p className="department-dashboard-empty">Your administrator account has no active department assignments. Contact the Super Admin.</p>}
     </div>;
   }
 
@@ -116,7 +115,7 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div>
+      <div className="admin-dashboard">
         <div style={{ marginBottom: '2rem' }}>
           <div className="skeleton skeleton-title" style={{ width: '280px', height: '32px' }} />
           <div className="skeleton skeleton-text" style={{ width: '400px', marginTop: '0.5rem' }} />
@@ -131,73 +130,36 @@ const Dashboard = () => {
   const filteredRoomsList = getFilteredRooms();
 
   return (
-    <div>
+      <div className="admin-dashboard">
       {/* ----------------------------------------------------
           1. Header & Live Operational Status Banner
           ---------------------------------------------------- */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '1rem',
-        marginBottom: '1.75rem' 
-      }}>
+      <header className="admin-dashboard-heading">
         <div>
-          <h1 style={{ 
-            fontFamily: 'Poppins, sans-serif', 
-            fontSize: '1.75rem', 
-            fontWeight: 700, 
-            color: '#162E24',
-            margin: '0 0 0.35rem 0',
-            letterSpacing: '-0.02em'
-          }}>
+          <span className="admin-eyebrow">HOTEL OPERATIONS</span>
+          <h1>
             {getGreeting()}, {user?.name?.split(' ')[0] || 'Staff'}
           </h1>
-          <p style={{ color: '#64748B', fontSize: '0.9rem', margin: 0 }}>
+          <p>
             {todayFormatted} &bull; Serendib Sanctuary Hotel Operations Control Center
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            gap: '0.45rem',
-            padding: '0.4rem 0.85rem',
-            background: '#F0FDF4',
-            border: '1px solid #BBF7D0',
-            borderRadius: '9999px',
-            color: '#15803D',
-            fontSize: '0.78rem',
-            fontWeight: 600
-          }}>
+        <div className="admin-dashboard-heading-actions">
+          <span className="admin-live-pill">
             <FaCheckCircle size={11} /> Real-Time Live Sync
           </span>
 
           <button 
             type="button" 
             onClick={fetchDashboardData}
-            className="btn btn-outline btn-sm"
-            style={{ 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              background: '#FFFFFF',
-              borderColor: 'rgba(22, 46, 36, 0.2)',
-              color: '#162E24',
-              borderRadius: '6px',
-              padding: '0.4rem 0.85rem',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
+            className="admin-refresh-button"
             title="Refresh dashboard metrics"
           >
             <FaSyncAlt size={11} /> Refresh
           </button>
         </div>
-      </div>
+      </header>
 
       {/* ----------------------------------------------------
           2. Row 1: Executive Operational KPIs (5 Cards)
@@ -215,8 +177,8 @@ const Dashboard = () => {
           <div className="pms-kpi-subtext">
             <span>{roomStats?.occupiedRooms || 0} of {roomStats?.totalRooms || 0} Rooms Occupied</span>
           </div>
-          <div style={{ width: '100%', height: '4px', background: '#E2E8F0', borderRadius: '9999px', marginTop: '0.75rem', overflow: 'hidden' }}>
-            <div style={{ width: `${occupancyRate}%`, height: '100%', background: '#162E24', borderRadius: '9999px' }} />
+          <div className="occupancy-progress" role="meter" aria-label="Occupancy rate" aria-valuemin="0" aria-valuemax="100" aria-valuenow={occupancyRate}>
+            <div style={{ width: `${occupancyRate}%` }} />
           </div>
         </div>
 
@@ -377,10 +339,10 @@ const Dashboard = () => {
       {/* ----------------------------------------------------
           4. Row 3: Quick Operations Actions Grid
           ---------------------------------------------------- */}
-      <div style={{ marginBottom: '1rem' }}>
-        <h3 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', margin: '0 0 0.85rem 0' }}>
+      <section className="admin-dashboard-quick-section">
+        <h2 className="admin-section-kicker">
           Front Office Quick Actions
-        </h3>
+        </h2>
         <div className="pms-quick-grid">
           <Link to="/reservations/new" className="pms-action-tile">
             <div className="pms-action-tile-icon">
@@ -424,7 +386,7 @@ const Dashboard = () => {
             <span>Billing & Invoices</span>
           </Link>
         </div>
-      </div>
+      </section>
 
       {/* ----------------------------------------------------
           5. Row 4: Recent Reservations & Activity Table

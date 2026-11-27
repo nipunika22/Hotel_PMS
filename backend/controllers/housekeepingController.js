@@ -1,72 +1,93 @@
 // backend/controllers/housekeepingController.js
 const HousekeepingTask = require("../models/HousekeepingTask");
-const Room = require("../models/Room");
 const User = require("../models/User");
+const Room = require("../models/Room");
+const { isValidObjectId } = require("mongoose");
 const {
+  ACTIVE_CLEANING_STATUSES,
+  createManualTask,
+  loadCurrentCleaningTasks,
+  syncCleaningTasks,
   assignTask,
   startTask,
   completeTask,
   inspectTask
 } = require("../services/housekeepingService");
-const { buildPropertyFilter, getActivePropertyId } = require("../middleware/propertyContext");
+const { buildPropertyFilter } = require("../middleware/propertyContext");
 const notificationService = require("../services/notificationService");
 
-// Get all housekeeping tasks (Admin / Manager / Staff view, or filtered for Housekeeper)
-exports.getTasks = async (req, res) => {
+async function listTasks(req, res, assignedOnly = false) {
   try {
     const { status, roomId, priority } = req.query;
-    const query = {};
-
-    // If housekeeping role, filter by assigned to current user unless manager/admin/staff
-    if (req.user.role === "housekeeping") {
-      query.$or = [
-        { assignedTo: req.user.id },
-        { assignedTo: null, status: "Pending" }
-      ];
+    if (roomId && (typeof roomId !== "string" || !isValidObjectId(roomId))) {
+      return res.status(400).json({ error: "Invalid room ID" });
+    }
+    const statuses = HousekeepingTask.schema.path("status").enumValues;
+    const pendingInspection = status === "Pending Inspection";
+    if (status && !pendingInspection && !statuses.includes(status)) {
+      return res.status(400).json({ error: "Invalid task status" });
+    }
+    if (priority && !HousekeepingTask.schema.path("priority").enumValues.includes(priority)) {
+      return res.status(400).json({ error: "Invalid task priority" });
     }
 
-    if (status) query.status = status;
-    if (roomId) query.room = roomId;
+    // The room is authoritative for tenancy, including legacy tasks with no task property.
+    const rooms = await Room.find(buildPropertyFilter(req, roomId ? { _id: roomId } : {}))
+      .select("roomNumber roomType floor status cleaningStatus isActive").lean();
+    const roomsById = new Map(rooms.map(room => [String(room._id), room]));
+    const query = { room: { $in: rooms.map(room => room._id) } };
+    const restrictUnassigned = !assignedOnly && req.user.role === "housekeeping";
+    if (assignedOnly) query.assignedTo = req.user.id;
+    else if (restrictUnassigned) {
+      query.$or = [
+        { assignedTo: req.user.id },
+        { assignedTo: null, status: { $in: ACTIVE_CLEANING_STATUSES } }
+      ];
+    }
+    if (status) query.status = pendingInspection ? "Completed" : status;
     if (priority) query.priority = priority;
 
-    const scopedQuery = buildPropertyFilter(req, query);
-    const tasks = await HousekeepingTask.find(scopedQuery)
-      .populate("room", "roomNumber roomType floor status cleaningStatus")
-      .populate("assignedTo", "name email role phone")
-      .populate("inspectedBy", "name email role")
-      .populate("createdBy", "name email")
-      .populate({
-        path: "reservation",
-        select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
-        populate: { path: "guest", select: "firstName lastName name phone" }
-      })
-      .sort({ createdAt: -1 });
+    const [tasks, current] = await Promise.all([
+      HousekeepingTask.find(query)
+        .populate("assignedTo", "name email role phone")
+        .populate("inspectedBy", "name email role")
+        .populate("createdBy", "name email")
+        .populate({
+          path: "reservation",
+          match: buildPropertyFilter(req, {}),
+          select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
+          populate: { path: "guest", select: "firstName lastName name phone" }
+        })
+        .sort({ createdAt: -1, _id: -1 })
+        .lean(),
+      loadCurrentCleaningTasks(rooms)
+    ]);
 
-    res.json(tasks);
+    const result = tasks.filter(task => !restrictUnassigned || task.assignedTo ||
+      task.status !== "Completed" || String(current.get(String(task.room))?._id) === String(task._id)
+    ).map(task => {
+      const room = roomsById.get(String(task.room));
+      const isCurrent = String(current.get(String(task.room))?._id) === String(task._id);
+      const displayStatus = isCurrent && task.status === "Completed" ? "Pending Inspection" : task.status;
+      return { ...task, room, isCurrent, displayStatus };
+    });
+    res.json(pendingInspection ? result.filter(task => task.displayStatus === status) : result);
   } catch (err) {
     console.error("Get housekeeping tasks error:", err);
     res.status(500).json({ error: "Failed to load housekeeping tasks" });
   }
-};
+}
 
-// Get current housekeeper's assigned tasks
-exports.getMyTasks = async (req, res) => {
+exports.getTasks = (req, res) => listTasks(req, res);
+exports.getMyTasks = (req, res) => listTasks(req, res, true);
+
+exports.syncTasks = async (req, res) => {
+  if (!req.propertyId) return res.status(400).json({ error: "Select a property before synchronizing housekeeping tasks" });
   try {
-    const scopedQuery = buildPropertyFilter(req, { assignedTo: req.user.id });
-    const tasks = await HousekeepingTask.find(scopedQuery)
-      .populate("room", "roomNumber roomType floor status cleaningStatus")
-      .populate("assignedTo", "name email role phone")
-      .populate("inspectedBy", "name email role")
-      .populate({
-        path: "reservation",
-        select: "reservationNumber checkInDate checkOutDate actualCheckOutDate guest",
-        populate: { path: "guest", select: "firstName lastName name phone" }
-      })
-      .sort({ priority: -1, createdAt: -1 });
-
-    res.json(tasks);
+    res.json(await syncCleaningTasks(req.propertyId, req.user.id));
   } catch (err) {
-    res.status(500).json({ error: "Failed to load your assigned tasks" });
+    console.error("Sync housekeeping tasks error:", err);
+    res.status(500).json({ error: "Failed to synchronize housekeeping tasks" });
   }
 };
 
@@ -79,38 +100,13 @@ exports.createTask = async (req, res) => {
   }
 
   try {
-    const room = await Room.findById(roomId);
-    if (!room) {
-      return res.status(404).json({ error: "Room not found" });
-    }
-
-    const targetPropertyId = room.property || req.propertyId || (await getActivePropertyId());
-
-    const task = new HousekeepingTask({
-      property: targetPropertyId,
-      room: roomId,
+    const { task, room, created } = await createManualTask(buildPropertyFilter(req, { _id: roomId }), {
       taskType: taskType || "Daily Cleaning",
       priority: priority || "Medium",
       notes: notes || "",
       assignedTo: assignedTo || null,
-      status: assignedTo ? "Assigned" : "Pending",
-      createdBy: req.user.id,
-      auditLog: [{
-        action: "TASK_CREATED",
-        performedBy: req.user.id,
-        timestamp: new Date(),
-        details: `Manual task created: ${taskType || "Daily Cleaning"}`
-      }]
+      userId: req.user.id
     });
-
-    await task.save();
-
-    // Set room cleaningStatus to Dirty and status to Cleaning if not Occupied
-    if (room.status !== "Occupied" && room.status !== "Maintenance" && room.status !== "Out of Order") {
-      room.status = "Cleaning";
-    }
-    room.cleaningStatus = "Dirty";
-    await room.save();
 
     const populated = await HousekeepingTask.findById(task._id)
       .populate("room", "roomNumber roomType floor status cleaningStatus")
@@ -123,7 +119,7 @@ exports.createTask = async (req, res) => {
       });
 
     // Notify assigned staff
-    if (assignedTo) {
+    if (created && assignedTo) {
       notificationService.createNotification({
         recipient: assignedTo,
         title: "New Housekeeping Task Assigned",
@@ -135,10 +131,9 @@ exports.createTask = async (req, res) => {
       }).catch(() => {});
     }
 
-    res.status(201).json(populated);
+    res.status(created ? 201 : 200).json(populated);
   } catch (err) {
-    console.error("Create task error:", err);
-    res.status(500).json({ error: "Failed to create housekeeping task" });
+    res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to create housekeeping task" });
   }
 };
 
@@ -152,7 +147,7 @@ exports.assignTask = async (req, res) => {
   }
 
   try {
-    const updated = await assignTask(id, staffId, req.user.id);
+    const updated = await assignTask(id, staffId, req.user.id, req.propertyId);
 
     // Notify newly assigned staff
     try {
@@ -178,7 +173,7 @@ exports.startTask = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const updated = await startTask(id, req.user.id);
+    const updated = await startTask(id, req.user.id, req.propertyId);
     res.json(updated);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to start task" });
@@ -191,7 +186,7 @@ exports.completeTask = async (req, res) => {
   const { notes, lostItems } = req.body;
 
   try {
-    const updated = await completeTask(id, req.user.id, { notes, lostItems });
+    const updated = await completeTask(id, req.user.id, { notes, lostItems, propertyId: req.propertyId });
 
     // Notify Front Desk / Supervisors
     try {
@@ -199,7 +194,7 @@ exports.completeTask = async (req, res) => {
         audience: "department",
         department: "Front Desk",
         title: "Room Cleaning Completed",
-        message: `Housekeeping completed for Room ${updated.room?.roomNumber || ""}. Room is now Available.`,
+        message: `Housekeeping completed for Room ${updated.room?.roomNumber || ""}. Room is awaiting supervisor inspection.`,
         category: "housekeeping",
         priority: "normal",
         actionUrl: "/housekeeping",
@@ -218,12 +213,12 @@ exports.inspectTask = async (req, res) => {
   const { id } = req.params;
   const { approved, notes } = req.body;
 
-  if (approved === undefined) {
+  if (typeof approved !== "boolean") {
     return res.status(400).json({ error: "Approval decision ('approved': true/false) is required" });
   }
 
   try {
-    const updated = await inspectTask(id, req.user.id, { approved: Boolean(approved), notes });
+    const updated = await inspectTask(id, req.user.id, { approved, notes, propertyId: req.propertyId });
     res.json(updated);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : "Failed to inspect task" });

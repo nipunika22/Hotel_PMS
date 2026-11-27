@@ -150,6 +150,7 @@ export const housekeepingAPI = {
   getMyTasks: () => api.get('/housekeeping/my'),
   getStaff: () => api.get('/housekeeping/staff'),
   createTask: (data) => api.post('/housekeeping', data),
+  syncTasks: () => api.post('/housekeeping/sync'),
   assignTask: (id, staffId) => api.put(`/housekeeping/${id}/assign`, { staffId }),
   startTask: (id) => api.put(`/housekeeping/${id}/start`),
   completeTask: (id, data) => api.put(`/housekeeping/${id}/complete`, data),
@@ -236,7 +237,9 @@ export const restaurantAPI = {
   getRestaurantOffers: (id) => api.get(`/restaurants/${id}/offers`),
   checkAvailability: (id, params) => api.get(`/restaurants/${id}/availability`, { params }),
   createReservation: (id, data) => api.post(`/restaurants/${id}/reservations`, data),
-  getReservationByRef: (ref) => api.get(`/restaurants/reservations/${ref}`),
+  getReservationByRef: (ref, { propertyId, guestToken } = {}) => api.get(`/restaurants/reservations/${ref}`, {
+    params: { propertyId }, headers: guestToken ? { 'X-Dining-Guest-Token': guestToken } : undefined
+  }),
   getMyReservations: () => api.get('/restaurants/my-reservations'),
   cancelReservation: (ref, data) => api.put(`/restaurants/reservations/${ref}/cancel`, data),
   lookupHotelStay: (data) => api.post('/restaurants/lookup-hotel-stay', data),
@@ -254,6 +257,7 @@ export const restaurantAPI = {
   updateTable: (id, data) => api.put(`/restaurants/admin/tables/${id}`, data),
   deleteTable: (id) => api.delete(`/restaurants/admin/tables/${id}`),
 
+  getAdminMenuCategories: (params) => api.get('/restaurants/admin/categories', { params }),
   createCategory: (data) => api.post('/restaurants/admin/categories', data),
   updateCategory: (id, data) => api.put(`/restaurants/admin/categories/${id}`, data),
   deleteCategory: (id) => api.delete(`/restaurants/admin/categories/${id}`),
@@ -277,6 +281,24 @@ export const restaurantAPI = {
   getAdminReservations: (params) => api.get('/restaurants/admin/reservations', { params }),
   updateReservationStatus: (id, data) => api.put(`/restaurants/admin/reservations/${id}/status`, data),
   chargeFolio: (id, data) => api.post(`/restaurants/admin/reservations/${id}/charge-folio`, data)
+};
+
+const restaurantOperationsPath = (restaurantId) => `/restaurants/admin/operations/${restaurantId}`;
+
+export const restaurantOperationsAPI = {
+  getRestaurants: () => api.get('/restaurants/admin/operations'),
+  getReservations: (id, params) => api.get(`${restaurantOperationsPath(id)}/reservations`, { params }),
+  arrive: (id, reservation) => api.put(`${restaurantOperationsPath(id)}/reservations/${reservation}/arrival`),
+  seat: (id, reservation) => api.put(`${restaurantOperationsPath(id)}/reservations/${reservation}/seat`),
+  complete: (reservation) => api.put(`/restaurants/admin/reservations/${reservation}/status`, { status: 'COMPLETED' }),
+  getMenu: (id) => api.get(`${restaurantOperationsPath(id)}/menu`),
+  saveOrder: (id, reservation, items, editing) => {
+    const path = `${restaurantOperationsPath(id)}/reservations/${reservation}/order`;
+    return editing ? api.put(path, { items }) : api.post(path, { items });
+  },
+  getBill: (id, order) => api.get(`${restaurantOperationsPath(id)}/orders/${order}`),
+  pay: (id, order, data) => api.post(`${restaurantOperationsPath(id)}/orders/${order}/payment`, data),
+  getSales: (id, params) => api.get(`${restaurantOperationsPath(id)}/sales`, { params })
 };
 
 // Hotel Event Management API
@@ -340,7 +362,7 @@ export const paymentAPI = {
   recordPayment: (data) => api.post('/payments', data),
   getPaymentsByReservation: (reservationId) => api.get('/payments', { params: { reservation: reservationId } }),
   initiatePayment: (data) => api.post('/payments/initiate', data),
-  verifyPaymentStatus: (reference) => api.get(`/payments/verify/${reference}`),
+  verifyPaymentStatus: (reference, propertyId) => api.get(`/payments/verify/${reference}`, { params: { propertyId } }),
   getMyPayments: () => api.get('/payments/my-payments'),
   getPayments: (params) => api.get('/payments', { params }),
   getPayment: (id) => api.get(`/payments/${id}`),

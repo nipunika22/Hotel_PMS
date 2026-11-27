@@ -12,16 +12,20 @@ describe("dining reservation price persistence with mocked models", () => {
   it("calculates and stores server-priced snapshots for 1, 2, and 5 guests, ignoring client prices", async () => {
     const originals = {
       restaurantFindOne: Restaurant.findOne,
+      restaurantFindOneAndUpdate: Restaurant.findOneAndUpdate,
       tableFindOne: RestaurantTable.findOne,
       tableFind: RestaurantTable.find,
       offerFindOne: RestaurantOffer.findOne,
       reservationFind: RestaurantReservation.find,
       reservationCreate: RestaurantReservation.create,
+      reservationSave: RestaurantReservation.prototype.save,
       reservationFindById: RestaurantReservation.findById
     };
+    const originalTransaction = mongoose.connection.transaction;
     const propertyId = new mongoose.Types.ObjectId();
     const restaurantId = new mongoose.Types.ObjectId();
     const userId = new mongoose.Types.ObjectId();
+    const tableId = new mongoose.Types.ObjectId();
     const stored = [];
     const offerIds = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
     const testOffers = [
@@ -39,19 +43,24 @@ describe("dining reservation price persistence with mocked models", () => {
     };
 
     try {
+      mongoose.connection.transaction = work => work({});
       Restaurant.findOne = async () => restaurant;
+      Restaurant.findOneAndUpdate = async () => restaurant;
       RestaurantTable.findOne = () => ({
         sort() { return this; },
         select() { return this; },
         lean: async () => ({ capacity: 5 })
       });
-      RestaurantTable.find = () => ({ sort: async () => [] });
+      RestaurantTable.find = () => ({
+        sort() { return this; },
+        session: async () => [{ _id: tableId, capacity: 5, location: "Indoor" }]
+      });
       RestaurantOffer.findOne = async ({ _id }) => testOffers.find((offer) => String(offer._id) === String(_id)) || null;
-      RestaurantReservation.find = async () => [];
-      RestaurantReservation.create = async (data) => {
-        const record = { ...data, _id: new mongoose.Types.ObjectId() };
+      RestaurantReservation.find = () => ({ session: async () => [] });
+      RestaurantReservation.prototype.save = async function() {
+        const record = this.toObject();
         stored.push(record);
-        return record;
+        return this;
       };
       RestaurantReservation.findById = () => {
         const query = {
@@ -136,12 +145,15 @@ describe("dining reservation price persistence with mocked models", () => {
       }
       assert.equal(stored.length, 6);
     } finally {
+      mongoose.connection.transaction = originalTransaction;
       Restaurant.findOne = originals.restaurantFindOne;
+      Restaurant.findOneAndUpdate = originals.restaurantFindOneAndUpdate;
       RestaurantTable.findOne = originals.tableFindOne;
       RestaurantTable.find = originals.tableFind;
       RestaurantOffer.findOne = originals.offerFindOne;
       RestaurantReservation.find = originals.reservationFind;
       RestaurantReservation.create = originals.reservationCreate;
+      RestaurantReservation.prototype.save = originals.reservationSave;
       RestaurantReservation.findById = originals.reservationFindById;
     }
   });

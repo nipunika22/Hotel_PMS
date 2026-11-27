@@ -5,7 +5,19 @@ const Reservation = require("../models/Reservation");
 const GuestExpense = require("../models/GuestExpense");
 const Guest = require("../models/Guest");
 const { buildPropertyFilter, getActivePropertyId } = require("../middleware/propertyContext");
+const paymentService = require("../services/paymentService");
 const notificationService = require("../services/notificationService");
+
+async function findInvoiceForPayment(req, id) {
+  const invoice = await Invoice.findOne(buildPropertyFilter(req, { _id: id }));
+  if (invoice || !req.propertyId) return invoice;
+
+  const legacy = await Invoice.findOne({ _id: id, property: null });
+  if (legacy?.reservation && await Reservation.exists(
+    buildPropertyFilter(req, { _id: legacy.reservation })
+  )) return legacy;
+  return null;
+}
 
 // Get all invoices
 exports.getInvoices = async (req, res) => {
@@ -60,7 +72,8 @@ exports.getInvoicesByReservation = async (req, res) => {
   }
 
   try {
-    const propertyFilter = req.propertyId ? { property: req.propertyId } : {};
+    if (!await Reservation.exists(buildPropertyFilter(req, { _id: reservationId }))) return res.json([]);
+    const propertyFilter = req.propertyId ? { property: { $in: [req.propertyId, null] } } : {};
     const invoices = await Invoice.find({ reservation: reservationId, ...propertyFilter })
       .populate("guest", "firstName lastName")
       .populate("reservation", "reservationNumber")
@@ -99,7 +112,21 @@ exports.getInvoice = async (req, res) => {
       return res.status(403).json({ error: "Access denied to invoice in another property" });
     }
 
-    res.json(invoice);
+    if (req.propertyId && !invoice.property && (!invoice.reservation ||
+        !await Reservation.exists(buildPropertyFilter(req, { _id: invoice.reservation._id })))) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const totalPaid = await paymentService.getInvoicePaidAmount(invoice);
+    const balanceDue = Math.max(0, invoice.totalAmount - totalPaid);
+    res.json({
+      ...invoice.toObject(),
+      totalPaid,
+      balanceDue,
+      paymentStatus: ["Cancelled", "Refunded"].includes(invoice.paymentStatus)
+        ? invoice.paymentStatus
+        : balanceDue === 0 ? "Paid" : totalPaid > 0 ? "Partial" : invoice.paymentStatus
+    });
   } catch (err) {
     res.status(500).json({ error: "Failed to load invoice" });
   }
@@ -267,13 +294,12 @@ exports.addPayment = async (req, res) => {
   }
 
   try {
-    const invoice = await Invoice.findOne(buildPropertyFilter(req, { _id: id }));
+    const invoice = await findInvoiceForPayment(req, id);
 
     if (!invoice) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
-    const paymentService = require("../services/paymentService");
     await paymentService.recordPayment({
       invoiceId: id,
       reservationId: invoice.reservation,
@@ -287,7 +313,7 @@ exports.addPayment = async (req, res) => {
       propertyId: invoice.property || req.propertyId
     });
 
-    const updatedInvoice = await Invoice.findOne(buildPropertyFilter(req, { _id: id }))
+    const updatedInvoice = await Invoice.findById(id)
       .populate("guest")
       .populate("reservation")
       .populate("travelAgent");
